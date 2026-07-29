@@ -1,0 +1,58 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Project data (результаты работы)
+output/
+Итоги/
+*.db
+*.sqlite
+*.sqlite3
+*.xlsx
+*.csv
+*.log
+
+# Tesseract (локально)
+Tesseract-OCR/
+
+# Mусорные папки
+first_try/
+temp/
+tmp/
+*.tmp
+*.bak
+*.swp
+
+# PyInstaller
+*.spec
+
+# Test coverage
+htmlcov/
+.coverage
+.tox/
+
+# OS
+.vscode/
+.DS_Store
