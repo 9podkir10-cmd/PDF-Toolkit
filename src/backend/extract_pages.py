@@ -14,8 +14,7 @@ def extract_pages(pdf_path, output_dir=None, mode='first', value=None, start=Non
             if value is None or value <= 0:
                 raise ValueError("Укажите положительное число страниц.")
             if value > total_pages:
-                log(f"Предупреждение: Запрошено {value} стр., но в файле всего {total_pages}. Скопировано: {total_pages}.")
-                value = total_pages
+                raise ValueError(f"Запрошено {value} стр., но в файле всего {total_pages}.")
             start_page = 0
             end_page = value - 1
             suffix = f"first_{value}_pages"
@@ -24,8 +23,7 @@ def extract_pages(pdf_path, output_dir=None, mode='first', value=None, start=Non
             if value is None or value <= 0:
                 raise ValueError("Укажите положительное число страниц.")
             if value > total_pages:
-                log(f"Предупреждение: Запрошено {value} стр., но в файле всего {total_pages}. Скопировано: {total_pages}.")
-                value = total_pages
+                raise ValueError(f"Запрошено {value} стр., но в файле всего {total_pages}.")
             start_page = total_pages - value
             end_page = total_pages - 1
             suffix = f"last_{value}_pages"
@@ -60,7 +58,6 @@ def extract_pages(pdf_path, output_dir=None, mode='first', value=None, start=Non
         raise RuntimeError(f"Ошибка при обработке {Path(pdf_path).name}: {e}")
 
 def process_all_pdfs(directory, output_base_dir=None, mode='first', value=None, start=None, end=None, log_callback=None):
-    """Пакетная обработка директории."""
     pdf_files = list(Path(directory).glob("*.pdf"))
     if not pdf_files:
         if log_callback:
