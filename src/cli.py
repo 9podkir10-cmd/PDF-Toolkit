@@ -5,7 +5,7 @@ from pathlib import Path
 from backend.extract_pages import extract_pages, process_all_pdfs
 from backend.collect_data import scan_and_export
 from backend.clear_path import DirectoryNormalizer
-# from backend.ocr import RegionExtractor
+from backend.barcodes import process_single_pdf_file, process_directory
 
 def main():
     parser = argparse.ArgumentParser(description="PDF-Toolkit: Универсальная утилита для работы с PDF.")
@@ -35,10 +35,9 @@ def main():
     # ПОДКОМАНДА 3: приведение директории в порядок перед индексацией + индексация
     index_parser = subparsers.add_parser("index",  help="Модуль индексации PDF файлов")
     index_parser.add_argument("-i", "--input", help="Исходная ПАПКА для сканирования PDF файлов")
-    index_parser.add_argument("-o", "--output", help="Выходная папка (по умолчанию: source_parent/output)")
-    index_parser.add_argument("--ocr", help="Путь к движку распознавания текста (.exe, в будущем обработка нейронок)")
-    index_parser.add_argument("-r", "--region", help="Координаты области в формате: x,y,w,h,page")
-    index_parser.add_argument("-t", "--template", help="Использовать сохраненный шаблон")
+    # index_parser.add_argument("--ocr", help="Путь к движку распознавания текста (.exe, в будущем обработка нейронок)")
+    # index_parser.add_argument("-r", "--region", help="Координаты области в формате: x,y,w,h,page")
+    # index_parser.add_argument("-t", "--template", help="Использовать сохраненный шаблон")
 
     # ПОДКОМАНДА 4: разделение по штрихкодам
     patch_parser = subparsers.add_parser("patch", help="Модуль разделения PDF по штрихкодам")
@@ -127,7 +126,47 @@ def main():
             print(f"Ошибка: {e}")
 
     elif args.action == "index":
-       pass
+        try:
+            normalizer = DirectoryNormalizer(args.input)
+            result = normalizer.normalize_structure()
+        except Exception as e:
+            index_parser.error(str(e))
+
+   
+    elif args.action == "patch":
+        input_path = args.input
+        output_dir = args.output if args.output else None
+        mode = args.mode
+        
+        if not os.path.exists(input_path):
+            patch_parser.error(f"Ошибка: Путь '{input_path}' не существует")
+        
+        target_codes = [mode]
+        
+        if os.path.isfile(input_path) and input_path.lower().endswith('.pdf'):
+            created_files = process_single_pdf_file(input_path, target_codes, output_dir)
+            if created_files:
+                print(f"Создано файлов: {len(created_files)}")
+                for f in created_files:
+                    print(f"  {f}")
+            else:
+                print(f"Штрихкод {mode} не найден")
+        
+        elif os.path.isdir(input_path):
+            result = process_directory(input_path, target_codes, output_dir)
+            total_processed = 0
+            total_created = 0
+            
+            for pdf_path, created_files in result["results"].items():
+                if created_files:
+                    total_processed += 1
+                    total_created += len(created_files)
+                    print(f"{Path(pdf_path).name}: создано {len(created_files)} файлов")
+            
+            print(f"\nОбработано PDF: {total_processed}")
+            print(f"Создано файлов: {total_created}")
+        else:
+            patch_parser.error(f"Ошибка: '{input_path}' не является файлом PDF или папкой")
 
 
 if __name__ == "__main__":
