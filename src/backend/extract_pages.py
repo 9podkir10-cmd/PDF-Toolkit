@@ -51,7 +51,6 @@ def extract_pages(pdf_path, output_dir=None, mode='first', value=None, start=Non
         new_pdf.close()
         pdf_document.close()
 
-        log(f"Создан файл: {output_path.name}")
         return output_path
 
     except Exception as e:

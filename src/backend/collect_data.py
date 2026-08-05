@@ -65,7 +65,14 @@ def scan_and_export(
         else:
             print("Указанные колонки не найдены, экспортируются все")
     
-    if not output_path:
+    if output_path:
+        output_path = Path(output_path)
+
+        if output_path.is_dir():
+            output_path = output_path / f"pdf_export.{format}"
+
+        output_path = str(output_path)
+    else:
         output_path = str(input_path.parent / f"pdf_export.{format}")
     
     exporters = {
