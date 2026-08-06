@@ -31,3 +31,5 @@ htmlcov/
 .coverage
 .tox/
 tests/
+settings.json
+data/

@@ -1,3 +1,163 @@
+import fitz
+import pytesseract
+from PIL import Image, ImageEnhance
+from io import BytesIO
+import uuid
+import json
+import os
+import sys
+from pathlib import Path
+from typing import List, Optional, Tuple, Any, Dict
+
+def get_pdf_path(input_path: str) -> Optional[str]:
+    path = Path(input_path)
+    if path.is_file() and path.suffix.lower() == '.pdf':
+        return str(path)
+    elif path.is_dir():
+        for p in path.rglob('*.pdf'):
+            return str(p)
+    return None
+
+def get_data_dir() -> Path:
+    if getattr(sys, 'frozen', False):
+        application_path = Path(sys.executable).parent
+    else:
+        application_path = Path(__file__).resolve().parent.parent 
+    
+    data_path = application_path / "data"
+    data_path.mkdir(parents=True, exist_ok=True)
+    return data_path
+
+
+class OCRBackend:
+    def __init__(self, tesseract_path: str = None):
+        """
+        Инициализация бэкенда.
+        :param tesseract_path: Путь к tesseract.exe (опционально, если не передан, берется из JSON)
+        """
+        self.data_root = get_data_dir()
+        self.tesseract_cmd = None
+        self.language = "eng"
+
+        # 1. Если путь передан явно при создании класса - используем его
+        if tesseract_path and os.path.exists(tesseract_path):
+            self.tesseract_cmd = tesseract_path.replace("\\", "/")
+            pytesseract.pytesseract.tesseract_cmd = self.tesseract_cmd
+            print(f"[CONFIG] Tesseract path set via __init__: {self.tesseract_cmd}")
+        else:
+            # 2. Иначе пытаемся загрузить из settings.json
+            self._load_settings()
+
+    def _load_settings(self):
+        """Загрузка настроек из JSON, если путь не передан в __init__"""
+        if getattr(sys, 'frozen', False):
+            base_path = Path(sys.executable).parent
+            settings_path = base_path / "backend" / "settings.json"
+        else:
+            current_file = Path(__file__).resolve()
+            base_path = current_file.parent.parent  # src/
+            settings_path = base_path / "backend" / "settings.json"
+
+        if settings_path.exists():
+            try:
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                
+                ocr_path = config.get("ocr_path")
+                if ocr_path and not self.tesseract_cmd: 
+                    self.tesseract_cmd = ocr_path.replace("\\", "/")
+                    pytesseract.pytesseract.tesseract_cmd = self.tesseract_cmd
+                    print(f"[CONFIG] Tesseract path loaded from JSON: {self.tesseract_cmd}")
+
+                raw_lang = config.get("language", "eng")
+                self.language = self._normalize_language(raw_lang)
+                print(f"[CONFIG] Language normalized to: '{self.language}' (was: '{raw_lang}')")
+
+            except Exception as e:
+                print(f"[ERROR] Не удалось прочитать settings.json: {e}")
+        else:
+            print(f"[WARNING] Файл настроек не найден: {settings_path}")
+            self.language = "eng"
+
+    @staticmethod
+    def _normalize_language(raw: str) -> str:
+        if not raw:
+            return "eng"
+        
+        raw = str(raw).lower()
+        
+        if "+" in raw:
+            return raw
+        elif "_" in raw:
+            return raw.replace("_", "+")
+        else:
+            # Авто-разбивка слитных строк
+            if "rus" in raw and "eng" in raw:
+                return "rus+eng"
+            elif "rus" in raw:
+                return "rus"
+            elif "eng" in raw:
+                return "eng"
+            return raw
+
+    def _preprocess_image(self, image: Image.Image) -> Image.Image:
+        gray = image.convert('L')
+        
+
+        enhancer = ImageEnhance.Contrast(gray)
+        enhanced = enhancer.enhance(1.5)
+        
+        return enhanced
+
+    def recognize(self, file_path: str, regions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        results = []
+        
+        if self.tesseract_cmd and not os.path.exists(self.tesseract_cmd):
+            raise FileNotFoundError(f"Tesseract не найден: {self.tesseract_cmd}")
+
+        doc = fitz.open(file_path)
+        
+        for i, region in enumerate(regions):
+            page_num = region['page']
+            rect_pdf = region['rect_pdf']
+            
+            fitz_page_index = page_num - 1 
+            if fitz_page_index < 0 or fitz_page_index >= len(doc):
+                continue
+                
+            page = doc[fitz_page_index]
+
+            # Рендерим область
+            pix = page.get_pixmap(clip=rect_pdf, dpi=300)
+            img_data = pix.tobytes("png")
+            img = Image.open(BytesIO(img_data))
+
+            processed_img = self._preprocess_image(img)
+
+            # Сохраняем обработанное изображение (опционально, для проверки качества)
+            unique_id = uuid.uuid4().hex[:8]
+            filename = f"region_{unique_id}_p{page_num}_x{region['x']}_y{region['y']}.png"
+            save_path = self.data_root / filename
+            processed_img.save(save_path)
+            print(f"[SAVE] Изображение сохранено: {save_path}")
+
+            try:
+                text = pytesseract.image_to_string(processed_img, lang=self.language)
+            except Exception as e:
+                text = f"[OCR Error]: {str(e)}"
+
+            results.append({
+                "text": text.strip(),
+                "image_path": str(save_path),
+                "page": page_num,
+                "coords": {"x": region['x'], "y": region['y'], "w": region['w'], "h": region['h']}
+            })
+
+        doc.close()
+        return results
+
+
+
 # import json
 # import hashlib
 # import re

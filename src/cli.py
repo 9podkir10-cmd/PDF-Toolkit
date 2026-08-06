@@ -35,18 +35,24 @@ def main():
     # ПОДКОМАНДА 3: приведение директории в порядок перед индексацией + индексация
     index_parser = subparsers.add_parser("index",  help="Модуль индексации PDF файлов")
     index_parser.add_argument("-i", "--input", help="Исходная ПАПКА для сканирования PDF файлов")
-    # index_parser.add_argument("--ocr", help="Путь к движку распознавания текста (.exe, в будущем обработка нейронок)")
-    # index_parser.add_argument("-r", "--region", help="Координаты области в формате: x,y,w,h,page")
-    # index_parser.add_argument("-t", "--template", help="Использовать сохраненный шаблон")
+    
+    # ПОДКОМАНДА 4: ocr
+    ocr_parser = subparsers.add_parser("ocr",  help="Модуль извлечения текста")
+    ocr_parser.add_argument("-i","--input", help="Путь к PDF-файлу или папке")    
+    ocr_parser.add_argument("--ocr", help="Путь к движку распознавания текста (.exe, в будущем обработка нейронок)")
+    ocr_parser.add_argument("-r", "--region", help="Координаты области в формате: x,y,w,h,page")
+    ocr_parser.add_argument("-t", "--template", help="Использовать сохраненный шаблон")
 
-    # ПОДКОМАНДА 4: разделение по штрихкодам
+    # ПОДКОМАНДА 5: разделение по штрихкодам
     patch_parser = subparsers.add_parser("patch", help="Модуль разделения PDF по штрихкодам")
     patch_parser.add_argument("-i", "--input", required=True, help="Путь к PDF-файлу или папке")
     patch_parser.add_argument("-o", "--output", help="Папка для сохранения")
     patch_parser.add_argument("-m", "--mode", choices=["patch1", "patch2", "patch3","patch4","patchT"],
                               required=True, help="Режим")
 
-    #ПОДКОМАНДА 5: обработка дубликатов (в разработке...)
+    #ПОДКОМАНДА 6: настройки
+
+    #ПОДКОМАНДА 7: обработка дубликатов (в разработке...)
 
     # ОБРАБОТКА ЛОГИКИ ВЫЗОВОВ
     args = parser.parse_args()
@@ -132,7 +138,9 @@ def main():
         except Exception as e:
             index_parser.error(str(e))
 
-   
+    elif args.action == "ocr":
+        pass
+
     elif args.action == "patch":
         input_path = args.input
         output_dir = args.output if args.output else None

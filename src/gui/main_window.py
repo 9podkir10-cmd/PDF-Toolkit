@@ -13,6 +13,8 @@ from .pages import (
     ExportPage,
     IndexPage,
     PatchPage,
+    Ocr_fPage,
+    SettingsPage
 )
 
 
@@ -21,8 +23,6 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("PDF-Toolkit")
-        self.resize(1400, 900)
-        self.setMinimumSize(1100, 700)
 
         self._build_ui()
 
@@ -43,13 +43,17 @@ class MainWindow(QMainWindow):
         self.split_page = SplitPage()
         self.export_page = ExportPage()
         self.index_page = IndexPage()
+        self.ocr_page = Ocr_fPage()        
         self.patch_page = PatchPage()
+        self.settings_page = SettingsPage()
 
         self.stack.addWidget(self.dashboard_page)   # index 0
         self.stack.addWidget(self.split_page)       # index 1
         self.stack.addWidget(self.export_page)      # index 2
         self.stack.addWidget(self.index_page)       # index 3
-        self.stack.addWidget(self.patch_page)       # index 4
+        self.stack.addWidget(self.ocr_page)       # index 4      
+        self.stack.addWidget(self.patch_page)       # index 5       
+        self.stack.addWidget(self.settings_page)    #index 6
 
         layout.addWidget(self.sidebar)
         layout.addWidget(self.stack, 1)
@@ -70,6 +74,14 @@ class MainWindow(QMainWindow):
             lambda: self.stack.setCurrentIndex(3)
         )
 
-        self.sidebar.patch_clicked.connect(
+        self.sidebar.ocr_clicked.connect(
             lambda: self.stack.setCurrentIndex(4)
+        )
+
+        self.sidebar.patch_clicked.connect(
+            lambda: self.stack.setCurrentIndex(5)
+        )
+        
+        self.sidebar.settings_clicked.connect(
+            lambda: self.stack.setCurrentIndex(6)
         )
