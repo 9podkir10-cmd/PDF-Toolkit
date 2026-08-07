@@ -1,5 +1,6 @@
 import sys
 import argparse
+import multiprocessing
 from pathlib import Path
 
 
@@ -18,7 +19,7 @@ def parse_arguments():
 
 
 def show_version():
-    version = "0.1.4"
+    version = "1.0.0"
     print(f"PDF-Toolkit v{version}")
 
 
@@ -61,4 +62,5 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()   
     main()

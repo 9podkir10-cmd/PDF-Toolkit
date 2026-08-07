@@ -148,7 +148,13 @@ class PDFViewer(QGraphicsView):
             self.rubber_band = None
         self.origin = None
 
-
+    def close_document(self):
+        """Закрывает текущий PDF-документ и освобождает файл."""
+        if hasattr(self, 'doc') and self.doc:
+            self.doc.close()
+            self.doc = None
+            # Также можно очистить pixmap и обновить виджет
+            self.update()
 
     def get_selected_area(self) -> tuple:
         if self.rubber_band:
