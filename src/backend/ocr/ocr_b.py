@@ -18,7 +18,7 @@ class OCRBackend:
     def __init__(self, tesseract_path: str, language: str = "eng"):
         self.tesseract_cmd = tesseract_path
         self.reload_from_config()   
-        self.language = self._normalize_language(language)
+        self.language = language
 
         if not os.path.exists(self.tesseract_cmd):
             raise FileNotFoundError(f"Tesseract не найден по пути: {self.tesseract_cmd}")
@@ -37,16 +37,7 @@ class OCRBackend:
             )
 
         self.tesseract_cmd = tesseract_path
-        self.language = self._normalize_language(language)
-
-    @staticmethod
-    def _normalize_language(lang: str) -> str:
-        mapping = {
-            "rus": "rus",
-            "eng": "eng",
-            "ruseng": "rus+eng"
-        }
-        return mapping.get(lang.lower().strip(), "eng")
+        self.language = language
 
     @staticmethod
     def _preprocess(image: Image.Image) -> Image.Image:

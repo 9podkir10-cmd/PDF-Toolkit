@@ -34,3 +34,4 @@ tests/
 settings.json
 data/
 dlls/
+ocr_storage/

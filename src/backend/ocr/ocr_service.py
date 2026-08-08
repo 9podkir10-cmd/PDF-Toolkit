@@ -11,7 +11,7 @@ from storage import Storage
 class OCRService:
     def __init__(self, tesseract_path: str, storage_root: Path = Path("data")):
         self.extractor = PDFExtractor()
-        self.ocr = OCRBackend(tesseract_path=tesseract_path, language="ruseng")
+        self.ocr = OCRBackend(tesseract_path=tesseract_path, language="rus+eng")
         self.storage = Storage(storage_root)
 
     def recognize(self, file_path: str, regions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
