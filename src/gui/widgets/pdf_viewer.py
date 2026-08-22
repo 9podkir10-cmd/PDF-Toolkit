@@ -29,8 +29,6 @@ class PDFViewer(QGraphicsView):
             QColor(255, 20, 147),   # Розовый
         ]        
         
-
-        # Для выделения
         self.rubber_band = None
         self.origin = None
         self.current_pixmap = None
@@ -46,7 +44,6 @@ class PDFViewer(QGraphicsView):
             self.current_pdf_path = pdf_path
             self.current_page_num = page_num
 
-            # Закрываем старый документ
             if self.doc:
                 self.doc.close()
 
@@ -54,7 +51,6 @@ class PDFViewer(QGraphicsView):
             page = self.doc[page_num]
             pix = page.get_pixmap(dpi=self.dpi)
 
-            # Конвертируем в QPixmap
             img_data = pix.tobytes("ppm")
             pixmap = QPixmap()
             pixmap.loadFromData(img_data)
@@ -100,7 +96,6 @@ class PDFViewer(QGraphicsView):
                 abs(self.origin.x() - event.pos().x()),
                 abs(self.origin.y() - event.pos().y())
             )
-            # Преобразуем координаты из view в scene
             scene_rect = self.mapToScene(rect.toRect()).boundingRect()
             self.rubber_band.setRect(scene_rect)
         super().mouseMoveEvent(event)
@@ -111,7 +106,6 @@ class PDFViewer(QGraphicsView):
             x, y, w, h = rect.x(), rect.y(), rect.width(), rect.height()
 
             if w > 5 and h > 5:  # минимальный размер
-                # 1. Создаем ПОСТОЯННУЮ рамку вместо временной
                 color_index = len(self.drawn_items) % len(self.colors)
                 color = self.colors[color_index]
                 
@@ -123,11 +117,9 @@ class PDFViewer(QGraphicsView):
                 self.scene.addItem(permanent_item)
                 self.drawn_items.append(permanent_item) # Сохраняем в список
                 
-
                 page_num_display = self.current_page_num + 1
                 self.rect_selected.emit(int(x), int(y), int(w), int(h), page_num_display)
                 
-                # 3. Удаляем временную рамку (rubber_band)
                 self.scene.removeItem(self.rubber_band)
                 self.rubber_band = None
                 self.origin = None
@@ -137,23 +129,19 @@ class PDFViewer(QGraphicsView):
         super().mouseReleaseEvent(event)
 
     def clear_selection(self):
-        # Удаляем все постоянные рамки
         for item in self.drawn_items:
             self.scene.removeItem(item)
         self.drawn_items.clear()
         
-        # Также сбрасываем временную рамку, если она есть
         if self.rubber_band:
             self.scene.removeItem(self.rubber_band)
             self.rubber_band = None
         self.origin = None
 
     def close_document(self):
-        """Закрывает текущий PDF-документ и освобождает файл."""
         if hasattr(self, 'doc') and self.doc:
             self.doc.close()
             self.doc = None
-            # Также можно очистить pixmap и обновить виджет
             self.update()
 
     def get_selected_area(self) -> tuple:

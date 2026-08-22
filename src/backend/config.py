@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import sys
+from typing import Optional
 
 CONFIG_FILENAME = "settings.json"
 
@@ -75,3 +76,32 @@ def get_selected_template_index() -> int:
 def id_to_lang_string(id_val: int) -> str:
     mapping = {0: "rus+eng", 1: "rus", 2: "eng"}
     return mapping.get(id_val, "rus+eng")
+
+# Профили
+def get_scan_profiles() -> list:
+    config = load_config()
+    return config.get("scan_profiles", [])
+
+def save_scan_profiles(profiles: list) -> bool:
+    config = load_config()
+    config["scan_profiles"] = profiles
+    try:
+        with open(get_config_path(), "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception:
+        return False
+
+def get_default_scan_profile() -> Optional[str]:
+    config = load_config()
+    return config.get("default_scan_profile")
+
+def set_default_scan_profile(profile_name: str) -> bool:
+    config = load_config()
+    config["default_scan_profile"] = profile_name
+    try:
+        with open(get_config_path(), "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception:
+        return False

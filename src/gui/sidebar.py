@@ -10,11 +10,10 @@ from PySide6.QtWidgets import (
 
 class Sidebar(QWidget):
     dashboard_clicked = Signal()
-    split_clicked = Signal()
     export_clicked = Signal()
     index_clicked = Signal()
-    ocr_clicked = Signal()
-    patch_clicked = Signal()
+    split_clicked = Signal()
+    scan_clicked = Signal()
     settings_clicked = Signal()
 
     def __init__(self):
@@ -38,20 +37,18 @@ class Sidebar(QWidget):
         layout.addSpacing(20)
 
         self.dashboard_button = QPushButton("Dashboard")
-        self.split_button = QPushButton("Split PDF")
         self.export_button = QPushButton("Export")
         self.index_button = QPushButton("Index")
-        self.ocr_button = QPushButton("OCR")
-        self.patch_button = QPushButton("Patch")
+        self.split_button = QPushButton("Split")
+        self.scan_button = QPushButton("Scan")
         self.settings_button = QPushButton("Settings")
 
         buttons = [
             (self.dashboard_button, self.dashboard_clicked),
-            (self.split_button, self.split_clicked),
             (self.export_button, self.export_clicked),
             (self.index_button, self.index_clicked),
-            (self.ocr_button, self.ocr_clicked),
-            (self.patch_button, self.patch_clicked),
+            (self.split_button, self.split_clicked),        
+            (self.scan_button, self.scan_clicked)
         ]
 
         for button, signal in buttons:

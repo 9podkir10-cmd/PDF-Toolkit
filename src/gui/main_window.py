@@ -11,9 +11,8 @@ from .pages import (
     DashboardPage,
     SplitPage,
     ExportPage,
-    IndexPage,
-    PatchPage,
     Ocr_fPage,
+    ScanPage,
     SettingsPage
 )
 
@@ -42,19 +41,16 @@ class MainWindow(QMainWindow):
         self.dashboard_page = DashboardPage()
         self.split_page = SplitPage()
         self.export_page = ExportPage()
-        self.index_page = IndexPage()
-        self.ocr_page = Ocr_fPage()        
-        self.patch_page = PatchPage()
+        self.index_page = Ocr_fPage()
+        self.scan_page = ScanPage()
         self.settings_page = SettingsPage()
 
         self.stack.addWidget(self.dashboard_page)   # index 0
-        self.stack.addWidget(self.split_page)       # index 1
-        self.stack.addWidget(self.export_page)      # index 2
-        self.stack.addWidget(self.index_page)       # index 3
-        self.stack.addWidget(self.ocr_page)       # index 4      
-        self.stack.addWidget(self.patch_page)       # index 5       
-        self.stack.addWidget(self.settings_page)    #index 6
-
+        self.stack.addWidget(self.export_page)      # index 1
+        self.stack.addWidget(self.index_page)       # index 2
+        self.stack.addWidget(self.split_page)       # index 3
+        self.stack.addWidget(self.scan_page)        # index 4
+        self.stack.addWidget(self.settings_page)    # index 5
         layout.addWidget(self.sidebar)
         layout.addWidget(self.stack, 1)
 
@@ -62,26 +58,22 @@ class MainWindow(QMainWindow):
             lambda: self.stack.setCurrentIndex(0)
         )
 
-        self.sidebar.split_clicked.connect(
+        self.sidebar.export_clicked.connect(
             lambda: self.stack.setCurrentIndex(1)
         )
 
-        self.sidebar.export_clicked.connect(
+        self.sidebar.index_clicked.connect(
             lambda: self.stack.setCurrentIndex(2)
         )
 
-        self.sidebar.index_clicked.connect(
+        self.sidebar.split_clicked.connect(
             lambda: self.stack.setCurrentIndex(3)
         )
-
-        self.sidebar.ocr_clicked.connect(
-            lambda: self.stack.setCurrentIndex(4)
-        )
-
-        self.sidebar.patch_clicked.connect(
-            lambda: self.stack.setCurrentIndex(5)
+        
+        self.sidebar.scan_clicked.connect(
+            lambda: self.stack.setCurrentIndex(4)        
         )
         
         self.sidebar.settings_clicked.connect(
-            lambda: self.stack.setCurrentIndex(6)
+            lambda: self.stack.setCurrentIndex(5)
         )

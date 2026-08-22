@@ -3,6 +3,10 @@ from backend.extract_pages import (
     extract_pages,
     process_all_pdfs,
 )
+from backend.barcodes import (
+    process_single_pdf_file,
+    process_directory,
+)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget,
@@ -73,7 +77,8 @@ class SplitPage(QWidget):
         self.mode_box.addItems([
             "first",
             "last",
-            "range"
+            "range",
+            "patch"       
         ])
 
         form.addRow("Mode:", self.mode_box)
@@ -103,6 +108,27 @@ class SplitPage(QWidget):
 
         main_layout.addLayout(form)
         main_layout.addWidget(self.range_group)
+
+        # ---- Page Patch ----
+        self.patch_combo = QComboBox()
+        self.patch_combo.addItems([
+            "patch1",
+            "patch2",
+            "patch3",
+            "patch4",
+            "patchT"
+        ])
+
+        patch_layout = QVBoxLayout()
+        patch_layout.addWidget(QLabel("Выберите штрихкод:"))
+        patch_layout.addWidget(self.patch_combo)
+
+        self.patch_group = QGroupBox("Page Patch")
+        self.patch_group.setLayout(patch_layout)
+        self.patch_group.setEnabled(False)
+
+        main_layout.addWidget(self.range_group)
+        main_layout.addWidget(self.patch_group)
 
         self.run_button = QPushButton("Run Split")
         self.run_button.setMinimumHeight(40)
@@ -167,9 +193,15 @@ class SplitPage(QWidget):
         if mode == "range":
             self.value_spin.setEnabled(False)
             self.range_group.setEnabled(True)
-        else:
+            self.patch_group.setEnabled(False)
+        elif mode == "patch":
+            self.value_spin.setEnabled(False)
+            self.range_group.setEnabled(False)
+            self.patch_group.setEnabled(True)
+        else:  # first, last
             self.value_spin.setEnabled(True)
             self.range_group.setEnabled(False)
+            self.patch_group.setEnabled(False)
 
     def _run(self):
         input_path = self.input_edit.text().strip()
@@ -214,26 +246,57 @@ class SplitPage(QWidget):
                 return
 
         try:
-            if os.path.isdir(input_path):
-                process_all_pdfs(
-                    input_path,
-                    output_path or None,
-                    mode,
-                    value,
-                    start,
-                    end,
-                    log_callback=self._log
-                )
+            if mode == "patch":
+                if os.path.isfile(input_path):
+                    if not input_path.lower().endswith(".pdf"):
+                        QMessageBox.warning(self, "Invalid File", "Please select a PDF file.")
+                        return
+                    created = process_single_pdf_file(
+                        input_path,
+                        [self.patch_combo.currentText()],
+                        output_path or None
+                    )
+                    self._log(f"Создано файлов: {len(created)}")
+                elif os.path.isdir(input_path):
+                    result = process_directory(
+                        input_path,
+                        [self.patch_combo.currentText()],
+                        output_path or None
+                    )
+                    total_created = 0
+                    for files in result["results"].values():
+                        total_created += len(files)
+                    self._log(f"Обработано PDF: {len(result['results'])}\nСоздано файлов: {total_created}")
+                else:
+                    QMessageBox.critical(self, "Error", "Input must be a PDF file or a folder.")
+                    return
+
+                QMessageBox.information(self, "Finished", "Splitting by barcode completed successfully.")
             else:
-                extract_pages(
-                    input_path,
-                    output_path or None,
-                    mode,
-                    value,
-                    start,
-                    end,
-                    log_callback=self._log
-                )
+                if os.path.isdir(input_path):
+                    process_all_pdfs(
+                        input_path,
+                        output_path or None,
+                        mode,
+                        value,
+                        start,
+                        end,
+                        log_callback=self._log
+                    )
+                else:
+                    extract_pages(
+                        input_path,
+                        output_path or None,
+                        mode,
+                        value,
+                        start,
+                        end,
+                        log_callback=self._log
+                    )
+                QMessageBox.information(self, "Finished", "PDF splitting completed successfully.")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
 
             QMessageBox.information(
                 self,
