@@ -49,7 +49,7 @@ class SplitPage(QWidget):
 
         self.input_edit = QLineEdit()
 
-        self.input_button = QPushButton("Browse ▼")
+        self.input_button = QPushButton("Browse")
         menu = QMenu(self)
 
         menu.addAction("PDF File", self._browse_file)
@@ -120,7 +120,7 @@ class SplitPage(QWidget):
         ])
 
         patch_layout = QVBoxLayout()
-        patch_layout.addWidget(QLabel("Выберите штрихкод:"))
+        patch_layout.addWidget(QLabel("Select a barcode:"))
         patch_layout.addWidget(self.patch_combo)
 
         self.patch_group = QGroupBox("Page Patch")
@@ -130,13 +130,14 @@ class SplitPage(QWidget):
         main_layout.addWidget(self.range_group)
         main_layout.addWidget(self.patch_group)
 
-        self.run_button = QPushButton("Run Split")
+        self.run_button = QPushButton("Split")
         self.run_button.setMinimumHeight(40)
 
         main_layout.addWidget(self.run_button)
 
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
+        self.log.setMinimumHeight(320)
         self.log.setPlaceholderText("Processing log...")
 
         main_layout.addWidget(self.log)

@@ -2,16 +2,20 @@
 from pathlib import Path
 from typing import List, Dict, Any
 from PIL import Image
-
-from ocr.box_to_img import PDFExtractor, Region
-from ocr.ocr_b import OCRBackend
+from backend.config import load_config
+from services.box_to_img import PDFExtractor, Region
+from services.ocr_b import OCRBackend
 from storage import Storage
 
 
 class OCRService:
     def __init__(self, tesseract_path: str, storage_root: Path = Path("data")):
         self.extractor = PDFExtractor()
-        self.ocr = OCRBackend(tesseract_path=tesseract_path, language="rus+eng")
+        config = load_config()
+        tesseract_path = config.get("ocr_path", "")
+        language = config.get("language", "rus+eng")
+        self.ocr = OCRBackend(tesseract_path=tesseract_path, language=language)
+
         self.storage = Storage(storage_root)
 
     def recognize(self, file_path: str, regions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

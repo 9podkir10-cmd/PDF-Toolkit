@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from typing import Optional
 from gui.signals import app_signals
 from backend.config import (
+    lang_to_id,
     load_config,
     save_main_settings,
     id_to_lang_string,
@@ -29,9 +30,7 @@ from backend.config import (
     set_selected_template_index,
     get_selected_template_index,
     get_scan_profiles,   
-    save_scan_profiles,       
-    get_default_scan_profile, 
-    set_default_scan_profile, 
+    save_scan_profiles
 )
 
 class SettingsPage(QWidget):
@@ -157,10 +156,12 @@ class SettingsPage(QWidget):
         storage_enabled = self.current_config.get("ocr_storage_enabled", False)
         
         self.input_edit.setText(ocr_path)
-        self.ocr_storage_checkbox.setChecked(storage_enabled)  
         
-        lang_to_id = {"rus+eng": 0, "rus": 1, "eng": 2}
-        target_id = lang_to_id.get(saved_lang, 0)
+        self.ocr_storage_checkbox.blockSignals(True)
+        self.ocr_storage_checkbox.setChecked(storage_enabled)
+        self.ocr_storage_checkbox.blockSignals(False)
+        
+        target_id = lang_to_id(saved_lang)
         
         btn = self.button_group.button(target_id)
         if btn:

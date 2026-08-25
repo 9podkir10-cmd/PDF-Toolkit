@@ -13,12 +13,8 @@ class DirectoryNormalizer:
         self.source_dir = Path(source_dir)
         self.output_dir = self.source_dir.parent / f"{self.source_dir.name}_hardlink"
         self.manifest_path = self.output_dir / "manifest.json"
-        
-        if self.output_dir.exists():
-            raise Exception(f"Папка {self.output_dir} уже существует!") #Повторный запуск будет разобран позже
-        
+
         self.pdf_files = self._discover_all_pdfs()
-        
         if not self.pdf_files:
             raise Exception(f"В папке {self.source_dir} нет PDF файлов!")
         
@@ -235,6 +231,24 @@ class DirectoryNormalizer:
                 manifest['unique'][original_name].setdefault('linked_files', []).append(dup_name)
 
     def normalize_structure(self) -> Dict:
+        if self.output_dir.exists() and self.manifest_path.exists():
+            with open(self.manifest_path, 'r', encoding='utf-8') as f:
+                manifest = json.load(f)
+            return {
+                'unique': manifest.get('unique', {}),
+                'duplicates': manifest.get('duplicates', {}),
+                'stats': manifest.get('stats', {}),
+                'structure': {
+                    'source_dir': self.source_dir.as_posix(),
+                    'output_dir': self.output_dir.as_posix(),
+                    'manifest_path': self.manifest_path.as_posix(),
+                    'total_files': manifest.get('stats', {}).get('total', 0),
+                    'unique_files': manifest.get('stats', {}).get('unique', 0),
+                    'duplicate_files': manifest.get('stats', {}).get('duplicates', 0)
+                }
+            }
+
+        self.output_dir.mkdir(parents=True, exist_ok=True)      
         manifest = {
             'source_dir': self.source_dir.as_posix(),
             'output_dir': self.output_dir.as_posix(),

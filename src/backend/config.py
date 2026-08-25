@@ -1,9 +1,25 @@
 import json
 from pathlib import Path
 import sys
-from typing import Optional
+from typing import Optional, Dict, Any
+
+def save_config(updates: dict) -> bool:
+    global _config_cache
+    config_path = get_config_path()
+    current = load_config()
+    current.update(updates)
+
+    try:
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(current, f, indent=4, ensure_ascii=False)
+        _config_cache = current
+        return True
+    except IOError as e:
+        print(f"Ошибка записи конфига: {e}")
+        return False
 
 CONFIG_FILENAME = "settings.json"
+_config_cache: Optional[Dict[str, Any]] = None
 
 def get_config_path() -> Path:
     if getattr(sys, 'frozen', False):
@@ -12,46 +28,53 @@ def get_config_path() -> Path:
         base_path = Path(__file__).resolve().parent
     return base_path / CONFIG_FILENAME
 
-def load_config() -> dict:
-    config_path = get_config_path()
-    defaults = {
+def _defaults() -> Dict[str, Any]:
+    return {
         "ocr_path": "",
         "language": "rus+eng",
         "ocr_storage_enabled": False,
         "templates": [],
-        "selected_template_index": -1
+        "selected_template_index": -1,
+        "scan_profiles": [],
     }
+
+def load_config(force_reload: bool = False) -> dict:
+    global _config_cache
+    if _config_cache is not None and not force_reload:
+        return _config_cache
+
+    config_path = get_config_path()
+    defaults = _defaults()
 
     if config_path.exists():
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                for key, val in defaults.items():
-                    if key not in data:
-                        data[key] = val
-                return data
+            for key, val in defaults.items():
+                if key not in data:
+                    data[key] = val
+            _config_cache = data
+            return data
         except (json.JSONDecodeError, IOError):
             print("Ошибка чтения конфига, используются значения по умолчанию.")
-            return defaults
-    return defaults
+    
+    _config_cache = defaults.copy()
+    return _config_cache
 
-def save_config(updates: dict) -> bool:
-    config_path = get_config_path()
-    current = {}
-    if config_path.exists():
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                current = json.load(f)
-        except:
-            pass
-    current.update(updates)
-    try:
-        with open(config_path, 'w', encoding='utf-8') as f:
-            json.dump(current, f, indent=4, ensure_ascii=False)
-        return True
-    except IOError as e:
-        print(f"Ошибка записи конфига: {e}")
-        return False
+# def save_config(updates: dict) -> bool:
+#     global _config_cache
+#     config_path = get_config_path()
+#     current = load_config()
+#     current.update(updates)
+    
+#     try:
+#         with open(config_path, 'w', encoding='utf-8') as f:
+#             json.dump(current, f, indent=4, ensure_ascii=False)
+#         _config_cache = current
+#         return True
+#     except IOError as e:
+#         print(f"Ошибка записи конфига: {e}")
+#         return False
 
 def save_main_settings(ocr_path: str, language: str, ocr_storage_enabled: bool) -> bool:
     return save_config({
@@ -60,7 +83,6 @@ def save_main_settings(ocr_path: str, language: str, ocr_storage_enabled: bool) 
         "ocr_storage_enabled": ocr_storage_enabled
     })
 
-# Шаблоны
 def save_templates(templates: list) -> bool:
     return save_config({"templates": templates})
 
@@ -77,31 +99,15 @@ def id_to_lang_string(id_val: int) -> str:
     mapping = {0: "rus+eng", 1: "rus", 2: "eng"}
     return mapping.get(id_val, "rus+eng")
 
-# Профили
+def lang_to_id(lang_str: str) -> int:
+    mapping = {"rus+eng": 0, "rus": 1, "eng": 2}
+    return mapping.get(lang_str, 0)
+
 def get_scan_profiles() -> list:
-    config = load_config()
-    return config.get("scan_profiles", [])
+    return load_config().get("scan_profiles", [])
 
 def save_scan_profiles(profiles: list) -> bool:
-    config = load_config()
-    config["scan_profiles"] = profiles
-    try:
-        with open(get_config_path(), "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
-        return True
-    except Exception:
-        return False
+    return save_config({"scan_profiles": profiles})
 
-def get_default_scan_profile() -> Optional[str]:
-    config = load_config()
-    return config.get("default_scan_profile")
-
-def set_default_scan_profile(profile_name: str) -> bool:
-    config = load_config()
-    config["default_scan_profile"] = profile_name
-    try:
-        with open(get_config_path(), "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
-        return True
-    except Exception:
-        return False
+def reload_config() -> dict:
+    return load_config(force_reload=True)

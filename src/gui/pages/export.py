@@ -39,7 +39,7 @@ class ExportPage(QWidget):
         form.setSpacing(15)
 
         self.input_edit = QLineEdit()
-        self.input_button = QPushButton("Browse ▼")
+        self.input_button = QPushButton("Browse")
         menu = QMenu(self)
 
         menu.addAction("PDF File", self._browse_file)
@@ -66,13 +66,13 @@ class ExportPage(QWidget):
 
         self.format_box = QComboBox()
         self.format_box.addItems([
-            "excel",
+            "xlsx",
             "csv",
             "json",
-            "parquet",
+            "xml",
             "html",
             "markdown",
-            "text",
+            "txt",
             "tsv",
             "clipboard",
         ])

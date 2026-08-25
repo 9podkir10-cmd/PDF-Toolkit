@@ -76,13 +76,13 @@ def scan_and_export(
         output_path = str(input_path.parent / f"pdf_export.{format}")
     
     exporters = {
-        'excel': lambda: df.to_excel(output_path, index=False),
+        'xlsx': lambda: df.to_excel(output_path, index=False, engine='openpyxl'),
         'csv': lambda: df.to_csv(output_path, index=False, encoding='utf-8-sig'),
         'json': lambda: df.to_json(output_path, orient='records', force_ascii=False, indent=2),
-        'parquet': lambda: df.to_parquet(output_path, index=False),
+        'xml': lambda: df.to_xml(output_path, index=False, pretty_print=True),
         'html': lambda: df.to_html(output_path, index=False),
         'markdown': lambda: df.to_markdown(output_path, index=False),
-        'text': lambda: df.to_string(output_path, index=False),
+        'txt': lambda: df.to_string(output_path, index=False),
         'tsv': lambda: df.to_csv(output_path, sep='\t', index=False, encoding='utf-8-sig'),
         'clipboard': lambda: df.to_clipboard(index=False, excel=True),
     }

@@ -1,5 +1,6 @@
 from pathlib import Path
-
+import json
+from typing import List
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QLabel, QMenu, QPushButton, QLineEdit,
@@ -9,10 +10,11 @@ from PySide6.QtWidgets import (
 
 from gui.widgets.pdf_viewer import PDFViewer
 from gui.signals import app_signals
-from backend.structure import find_manifest, update_manifest_for_file, preview_structure, structure_pdfs
-from backend.ocr.box_to_img import PDFExtractor, Region
-from backend.ocr.ocr_b import OCRBackend
-from backend.ocr.storage import Storage
+from backend.structure import preview_structure, structure_pdfs 
+from backend.manifest import find_manifest, update_manifest_for_file
+from backend.services.box_to_img import PDFExtractor, Region
+from backend.services.ocr_b import OCRBackend
+from backend.services.storage import Storage
 from backend.clear_path import DirectoryNormalizer
 from backend.config import load_config, get_templates, get_selected_template_index, set_selected_template_index
 
@@ -24,6 +26,9 @@ class Ocr_fPage(QWidget):
         self.selected_rects = [] 
         self.zone_texts = []
         self.zone_ids = []
+        
+        self.is_locked = False
+        self.locked_rects = [] 
         
         self.input_mode = None
         self.pdf_queue = []
@@ -46,28 +51,9 @@ class Ocr_fPage(QWidget):
         main_layout.setContentsMargins(30, 30, 30, 30)
         main_layout.setSpacing(20)
 
-        title = QLabel("OCR — распознавание текста")
+        title = QLabel("OCR")
         title.setStyleSheet("font-size: 24px; font-weight: bold;")
         main_layout.addWidget(title)
-
-        # Панель управления
-        form = QFormLayout()
-        form.setSpacing(15)
-
-        self.input_edit = QLineEdit()
-        self.input_button = QPushButton("Browse ▼")
-
-        menu = QMenu(self)
-        menu.addAction("PDF File", self._browse_file)
-        menu.addAction("Folder", self._browse_folder)
-        self.input_button.setMenu(menu)
-
-        input_layout = QHBoxLayout()
-        input_layout.addWidget(self.input_edit)
-        input_layout.addWidget(self.input_button)
-        form.addRow("Input:", input_layout)
-
-        main_layout.addLayout(form)
 
         # Основной контент
         content_layout = QHBoxLayout()
@@ -85,13 +71,27 @@ class Ocr_fPage(QWidget):
         right_panel = QVBoxLayout()
         right_panel.setSpacing(15)
 
+        # ---- Выбор файла ----
+        self.input_edit = QLineEdit()
+        self.input_button = QPushButton("Browse")
+        menu = QMenu(self)
+        menu.addAction("PDF File", self._browse_file)
+        menu.addAction("Folder", self._browse_folder)
+        self.input_button.setMenu(menu)
+
+        input_layout = QHBoxLayout()
+        input_layout.addWidget(self.input_edit)
+        input_layout.addWidget(self.input_button)
+        right_panel.addLayout(input_layout)
+        right_panel.addSpacing(10)
+
         # ---- ocr buttons ----
         self.ocr_button = QPushButton("Распознать выделенную область")
         self.ocr_button.setMinimumHeight(40)
         self.ocr_button.setEnabled(False)
         right_panel.addWidget(self.ocr_button)
 
-        self.clear_button = QPushButton("Очистить выделение")
+        self.clear_button = QPushButton("Отменить выделение")
         right_panel.addWidget(self.clear_button)
         right_panel.addSpacing(20)
 
@@ -151,13 +151,65 @@ class Ocr_fPage(QWidget):
     def _connect_signals(self):
         self.input_edit.textChanged.connect(self._on_path_changed)
         self.ocr_button.clicked.connect(self._run_ocr)
-        self.clear_button.clicked.connect(self._clear_selection)
+        self.clear_button.clicked.connect(self._undo_selection)
         self.prev_btn.clicked.connect(self._prev_page)
         self.next_btn.clicked.connect(self._next_page)
+        self.viewer.lock_toggled.connect(self._on_lock_toggled)     
         self.page_spin.valueChanged.connect(self._change_page)
         self.apply_btn.clicked.connect(self._apply_action)
 
     # ---------- Навигация и загрузка ----------
+    def _get_unrecognized_pdfs(self, folder_path: str) -> List[str]:
+        base = Path(folder_path)
+        manifest_path = base / "manifest.json"
+        skip_original_paths = set()  # будем хранить original_path файлов, которые нужно пропустить
+
+        if manifest_path.exists():
+            with open(manifest_path, 'r', encoding='utf-8') as f:
+                manifest = json.load(f)
+
+            duplicates = manifest.get('duplicates', {})
+            if isinstance(duplicates, dict):
+                for entry in duplicates.values():
+                    if isinstance(entry, dict):
+                        orig = entry.get('original_path')
+                        if orig:
+                            skip_original_paths.add(str(Path(orig).resolve()))
+
+            unique = manifest.get('unique', {})
+            if isinstance(unique, dict):
+                for entry in unique.values():
+                    if not isinstance(entry, dict):
+                        continue
+                    ocr = entry.get('ocr')
+                    if isinstance(ocr, dict) and ocr.get('is_recognized', False):
+                        orig = entry.get('original_path')
+                        if orig:
+                            skip_original_paths.add(str(Path(orig).resolve()))
+
+        all_pdfs = list(base.rglob("*.pdf"))
+        unrecognized = []
+
+        for p in all_pdfs:
+            p_resolved = p.resolve()
+            should_skip = False
+
+            for skip_orig_str in skip_original_paths:
+                try:
+                    skip_path = Path(skip_orig_str).resolve()
+                    if p_resolved.samefile(skip_path):
+                        should_skip = True
+                        break
+                except (FileNotFoundError, OSError):
+                    if str(p_resolved) == skip_orig_str:
+                        should_skip = True
+                        break
+
+            if not should_skip:
+                unrecognized.append(str(p_resolved))
+
+        return unrecognized
+    
     def _browse_file(self):
         filename, _ = QFileDialog.getOpenFileName(
             self, "Select PDF File", "", "PDF Files (*.pdf)"
@@ -183,23 +235,16 @@ class Ocr_fPage(QWidget):
             normalized_path = orig_path
 
         self.input_mode = "folder"
-        self.pdf_queue = sorted(
-            str(p) for p in normalized_path.rglob("*.pdf")
-        )
+        self.pdf_queue = self._get_unrecognized_pdfs(str(normalized_path))
         if not self.pdf_queue:
-            QMessageBox.warning(
-                self,
-                "Ошибка",
-                "В папке нет PDF файлов"
-            )
+            QMessageBox.information(self, "Информация", "Все PDF уже распознаны.")
             return
 
         self.current_index = 0
-
         self.input_edit.blockSignals(True)
         self.input_edit.setText(str(normalized_path))
         self.input_edit.blockSignals(False)
-        self._load_pdf(self.pdf_queue[0])      
+        self._load_pdf(self.pdf_queue[0])
                 
     def _finish_folder_processing(self):
         from PySide6.QtWidgets import QDialog, QPushButton, QVBoxLayout, QPlainTextEdit, QHBoxLayout
@@ -309,10 +354,21 @@ class Ocr_fPage(QWidget):
         self.next_btn.setEnabled(total_pages > 1)
         self.page_info.setText(f"Страница 1 из {total_pages}")
         self.ocr_button.setEnabled(False)
+        self._update_view_rects()
         self.result_text.setPlainText(f"PDF загружен:\n{pdf_path}")
+        
+        if self.is_locked and self.locked_rects:
+            self.selected_rects.clear()
+            self.zone_texts.clear()
+            self.zone_ids.clear()
+            current_page = self.viewer.current_page() + 1
+            for (x, y, w, h) in self.locked_rects:
+                self.selected_rects.append((x, y, w, h, current_page))
+            self._update_view_rects()
+            self.ocr_info.setText(f"Выделено областей: {len(self.selected_rects)}")
+            self._run_ocr()
 
     def _on_path_changed(self, path: str):
-
         if not path.strip():
             return
 
@@ -322,37 +378,19 @@ class Ocr_fPage(QWidget):
             self.input_mode = "file"
             self.pdf_queue = []
             self.current_index = -1
-
             self._load_pdf(str(p))
             return
 
-
         if p.is_dir():
-
             self.input_mode = "folder"
-
-            self.pdf_queue = sorted(
-                str(x) for x in p.rglob("*.pdf")
-            )
-
+            self.pdf_queue = self._get_unrecognized_pdfs(str(p))
             if self.pdf_queue:
                 self.current_index = 0
-                self._load_pdf(
-                    self.pdf_queue[0]
-                )
+                self._load_pdf(self.pdf_queue[0])
             else:
-                self.result_text.setPlainText(
-                    "PDF не найден"
-                )
-
-    def _get_pdf_path(self, input_path: str):
-        path = Path(input_path)
-        if path.is_file() and path.suffix.lower() == '.pdf':
-            return str(path)
-        elif path.is_dir():
-            for p in path.rglob('*.pdf'):
-                return str(p)
-        return None
+                self.result_text.setPlainText("Все PDF уже распознаны.")
+                self.pdf_queue = []
+                self.current_index = -1
 
     def _change_page(self, page_num: int):
         if hasattr(self, '_changing_page') and self._changing_page:
@@ -360,13 +398,11 @@ class Ocr_fPage(QWidget):
         self._changing_page = True
         try:
             self.viewer.go_to_page(page_num - 1)
-            self.viewer.clear_selection()
-            self.selected_rects = [] 
-            self.ocr_button.setEnabled(False)
             total_pages = self.page_spin.maximum()
             self.prev_btn.setEnabled(page_num > 1)
             self.next_btn.setEnabled(page_num < total_pages)
             self.page_info.setText(f"Страница {page_num} из {total_pages}")
+            self._update_view_rects()
         finally:
             self._changing_page = False
 
@@ -389,6 +425,42 @@ class Ocr_fPage(QWidget):
         self.ocr_button.setEnabled(count > 0)
         zone_index = count - 1
         self.result_text.appendPlainText(f"zone{zone_index}: {new_rect}")
+        self._update_view_rects()
+
+    def _undo_selection(self):
+        if not self.selected_rects:
+            return
+        self.viewer.remove_last_rect()
+        self.selected_rects.pop()
+        if self.zone_texts:
+            self.zone_texts.pop()
+        if self.zone_ids:
+            self.zone_ids.pop()
+        count = len(self.selected_rects)
+        self.ocr_info.setText(f"Выделено областей: {count}")
+        self.ocr_button.setEnabled(count > 0)
+        self._refresh_result_text()
+        self._update_view_rects()
+        
+    def _on_lock_toggled(self, locked):
+        self.is_locked = locked
+        if locked:
+            self.locked_rects = [(x, y, w, h) for (x, y, w, h, page) in self.selected_rects]
+        else:
+            self.locked_rects = []
+            self._clear_selection()
+
+    def _update_view_rects(self):
+        if not hasattr(self, 'viewer') or not self.viewer:
+            return
+        current_page = self.viewer.current_page()  # 0-based
+        filtered = [(x, y, w, h) for (x, y, w, h, p) in self.selected_rects if p == current_page + 1]
+        self.viewer.set_rects(filtered)
+
+    def _refresh_result_text(self):
+        self.result_text.clear()
+        for idx, rect in enumerate(self.selected_rects):
+            self.result_text.appendPlainText(f"zone{idx}: {rect}")
 
     def _clear_selection(self):
         self.viewer.clear_selection()
@@ -397,6 +469,7 @@ class Ocr_fPage(QWidget):
         self.zone_ids.clear()
         self.ocr_info.setText("Выделено областей: 0")
         self.ocr_button.setEnabled(False)
+        self._update_view_rects()
 
     # ---------- Основной OCR ----------
     def _run_ocr(self):
@@ -593,7 +666,6 @@ class Ocr_fPage(QWidget):
                 next_pdf = self.pdf_queue[self.current_index]
                 self._load_pdf(next_pdf)
             else:
-                app_signals.dashboard_updated.emit()
                 self._finish_folder_processing()
 
 
