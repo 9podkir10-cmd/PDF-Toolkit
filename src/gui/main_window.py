@@ -13,6 +13,7 @@ from .pages import (
     ExportPage,
     Ocr_fPage,
     ScanPage,
+    FormsPage,
     SettingsPage
 )
 
@@ -43,6 +44,7 @@ class MainWindow(QMainWindow):
         self.export_page = ExportPage()
         self.index_page = Ocr_fPage()
         self.scan_page = ScanPage()
+        self.forms_page = FormsPage()
         self.settings_page = SettingsPage()
 
         self.stack.addWidget(self.dashboard_page)   # index 0
@@ -50,7 +52,8 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.index_page)       # index 2
         self.stack.addWidget(self.split_page)       # index 3
         self.stack.addWidget(self.scan_page)        # index 4
-        self.stack.addWidget(self.settings_page)    # index 5
+        self.stack.addWidget(self.forms_page)       # index 5
+        self.stack.addWidget(self.settings_page)    # index 6
         layout.addWidget(self.sidebar)
         layout.addWidget(self.stack, 1)
 
@@ -74,6 +77,10 @@ class MainWindow(QMainWindow):
             lambda: self.stack.setCurrentIndex(4)        
         )
         
-        self.sidebar.settings_clicked.connect(
+        self.sidebar.forms_clicked.connect(
             lambda: self.stack.setCurrentIndex(5)
+        )
+        
+        self.sidebar.settings_clicked.connect(
+            lambda: self.stack.setCurrentIndex(6)
         )

@@ -5,21 +5,22 @@ from pathlib import Path
 from typing import Dict, List
 
 def sanitize_segment(segment: str) -> str:
+    """Очищает сегмент пути от недопустимых символов."""
     cleaned = re.sub(r'[^a-zA-Zа-яА-ЯёЁ0-9\s\-]', '', segment)
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     return cleaned
 
-def extract_path_segments_from_template(template: str) -> List[str]:
-    if not template:
-        return []
-    parts = re.split(r'\{zone\d+\}', template)
-    result = []
-    for part in parts:
-        cleaned = re.sub(r'[^a-zA-Zа-яА-ЯёЁ0-9\s\-]', '', part)
-        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-        if cleaned:
-            result.append(cleaned)
-    return result
+def build_path_from_structure(structure_template: str, zone_texts: List[str]) -> Path:
+    """
+    Подставляет значения zone_texts в шаблон структуры и возвращает относительный путь.
+    Пример: structure_template = "{zone0}/{zone1}", zone_texts = ["ООО Ромашка", "2025"] → Path("ООО Ромашка/2025")
+    """
+    path_str = structure_template
+    for i, text in enumerate(zone_texts):
+        path_str = path_str.replace(f"{{zone{i}}}", text)
+    # Разбиваем по '/' и очищаем каждый сегмент
+    segments = [sanitize_segment(s) for s in path_str.split('/') if s.strip()]
+    return Path(*segments)
 
 def structure_pdfs(base_dir: Path) -> Dict:
     manifest_path = base_dir / "manifest.json"
@@ -42,16 +43,26 @@ def structure_pdfs(base_dir: Path) -> Dict:
         ocr = entry.get('ocr')
         if not ocr or not ocr.get('is_recognized'):
             continue
-
         if entry.get('structured', False):
             continue
 
-        template = ocr.get('used_template')
-        if not template:
+        # Используем новое поле used_structure и zone_texts
+        structure_template = ocr.get('used_structure')
+        zone_texts = ocr.get('zone_texts', [])
+        if not structure_template or not zone_texts:
+            # Нет шаблона структуры или текстов — пропускаем
             continue
 
-        segments = extract_path_segments_from_template(template)
-        if not segments:
+        try:
+            rel_path = build_path_from_structure(structure_template, zone_texts)
+        except Exception as e:
+            details.append(f"Ошибка построения пути для {key}: {e}")
+            errors += 1
+            continue
+
+        if not rel_path.parts:
+            # Пустой путь — некуда перемещать
+            details.append(f"Пустой путь для {key}, пропускаем")
             continue
 
         source_name = ocr.get('new_name')
@@ -65,9 +76,7 @@ def structure_pdfs(base_dir: Path) -> Dict:
             details.append(f"Файл не найден: {source_file}")
             continue
 
-        target_dir = base_dir
-        for seg in segments:
-            target_dir = target_dir / seg
+        target_dir = base_dir / rel_path
         target_dir.mkdir(parents=True, exist_ok=True)
 
         target_file = target_dir / source_file.name
@@ -76,8 +85,7 @@ def structure_pdfs(base_dir: Path) -> Dict:
             shutil.move(str(source_file), str(target_file))
             moved += 1
             entry['structured'] = True
-            rel_path = target_file.relative_to(base_dir).as_posix()
-            entry['moved_to'] = rel_path
+            entry['moved_to'] = target_file.relative_to(base_dir).as_posix()
             details.append(f"Перемещён: {source_file.name} → {target_file}")
         except Exception as e:
             errors += 1
@@ -91,7 +99,7 @@ def structure_pdfs(base_dir: Path) -> Dict:
         "errors": errors,
         "details": details
     }
-    
+
 def preview_structure(base_dir: Path) -> str:
     manifest_path = base_dir / "manifest.json"
     if not manifest_path.exists():
@@ -108,18 +116,21 @@ def preview_structure(base_dir: Path) -> str:
             ocr = entry.get('ocr')
             if not ocr or not ocr.get('is_recognized'):
                 continue
-            template = ocr.get('used_template')
-            if not template:
+            structure_template = ocr.get('used_structure')
+            zone_texts = ocr.get('zone_texts', [])
+            if not structure_template or not zone_texts:
                 continue
-            segments = extract_path_segments_from_template(template)
-            if not segments:
-                continue
-            rel_path = '/'.join(segments)
-            paths.append(rel_path)
+            try:
+                rel_path = build_path_from_structure(structure_template, zone_texts)
+                if rel_path.parts:
+                    paths.append('/'.join(rel_path.parts))
+            except Exception:
+                pass
 
     if not paths:
-        return "Нет файлов для структуризации (все уже обработаны или нет распознанных)."
+        return "Нет файлов для структуризации (все уже обработаны или нет шаблона структуры)."
 
+    # Построение дерева каталогов
     tree = {}
     for path in paths:
         parts = path.split('/')

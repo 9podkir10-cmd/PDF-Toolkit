@@ -1,20 +1,21 @@
 from pathlib import Path
-import json
-from typing import List
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QLabel, QMenu, QPushButton, QLineEdit,
-    QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox,
+    QVBoxLayout, QHBoxLayout, QMessageBox, QCheckBox,
     QFileDialog, QSpinBox, QPlainTextEdit, QComboBox,
 )
 
+from backend.services.queue_service import PDFQueueService
+from backend.services.file_workflow import PDFFileWorkflow
+from backend.services.ocr_workflow import OCRWorkflow
+from backend.services.template_service import FilenameTemplateService
 from gui.widgets.pdf_viewer import PDFViewer
+from gui.widgets.models import OCRSession
 from gui.signals import app_signals
 from backend.structure import preview_structure, structure_pdfs 
-from backend.manifest import find_manifest, update_manifest_for_file
 from backend.services.box_to_img import PDFExtractor, Region
 from backend.services.ocr_b import OCRBackend
-from backend.services.storage import Storage
 from backend.clear_path import DirectoryNormalizer
 from backend.config import load_config, get_templates, get_selected_template_index, set_selected_template_index
 
@@ -22,23 +23,24 @@ from backend.config import load_config, get_templates, get_selected_template_ind
 class Ocr_fPage(QWidget):
     def __init__(self):
         super().__init__()
-        self.current_pdf_path = None
-        self.selected_rects = [] 
-        self.zone_texts = []
-        self.zone_ids = []
-        
-        self.is_locked = False
-        self.locked_rects = [] 
-        
-        self.input_mode = None
-        self.pdf_queue = []
-        self.current_index = -1 
+        self.session = OCRSession() 
+        self._ocr_running = False
 
-        self.extractor = PDFExtractor()
-        self.storage = None
+        self.queue_service = PDFQueueService()
+        self.template_service = FilenameTemplateService()
+        self.file_workflow = PDFFileWorkflow(self.template_service)
+
         config = load_config()
-        self.ocr_storage_enabled = config.get("ocr_storage_enabled", False)
-        self.ocr_backend = None
+        tesseract_path = config.get("ocr_path", None)
+        language = config.get("language", "rus+eng")
+
+        ocr_backend = OCRBackend(tesseract_path, language)
+
+        self.ocr_workflow = OCRWorkflow(
+            extractor=PDFExtractor(),
+            ocr=ocr_backend,
+            storage=None,
+        )
 
         self._build_ui()
         self._connect_signals()
@@ -86,12 +88,20 @@ class Ocr_fPage(QWidget):
         right_panel.addSpacing(10)
 
         # ---- ocr buttons ----
+        ocr_row = QHBoxLayout()
         self.ocr_button = QPushButton("Распознать выделенную область")
         self.ocr_button.setMinimumHeight(40)
         self.ocr_button.setEnabled(False)
-        right_panel.addWidget(self.ocr_button)
+        ocr_row.addWidget(self.ocr_button, 4)
+
+        self.auto_ocr_checkbox = QCheckBox("Auto")
+        self.auto_ocr_checkbox.setChecked(False)
+        ocr_row.addWidget(self.auto_ocr_checkbox, 1)
+
+        right_panel.addLayout(ocr_row)
 
         self.clear_button = QPushButton("Отменить выделение")
+        self.clear_button.setMinimumHeight(40)
         right_panel.addWidget(self.clear_button)
         right_panel.addSpacing(20)
 
@@ -159,57 +169,6 @@ class Ocr_fPage(QWidget):
         self.apply_btn.clicked.connect(self._apply_action)
 
     # ---------- Навигация и загрузка ----------
-    def _get_unrecognized_pdfs(self, folder_path: str) -> List[str]:
-        base = Path(folder_path)
-        manifest_path = base / "manifest.json"
-        skip_original_paths = set()  # будем хранить original_path файлов, которые нужно пропустить
-
-        if manifest_path.exists():
-            with open(manifest_path, 'r', encoding='utf-8') as f:
-                manifest = json.load(f)
-
-            duplicates = manifest.get('duplicates', {})
-            if isinstance(duplicates, dict):
-                for entry in duplicates.values():
-                    if isinstance(entry, dict):
-                        orig = entry.get('original_path')
-                        if orig:
-                            skip_original_paths.add(str(Path(orig).resolve()))
-
-            unique = manifest.get('unique', {})
-            if isinstance(unique, dict):
-                for entry in unique.values():
-                    if not isinstance(entry, dict):
-                        continue
-                    ocr = entry.get('ocr')
-                    if isinstance(ocr, dict) and ocr.get('is_recognized', False):
-                        orig = entry.get('original_path')
-                        if orig:
-                            skip_original_paths.add(str(Path(orig).resolve()))
-
-        all_pdfs = list(base.rglob("*.pdf"))
-        unrecognized = []
-
-        for p in all_pdfs:
-            p_resolved = p.resolve()
-            should_skip = False
-
-            for skip_orig_str in skip_original_paths:
-                try:
-                    skip_path = Path(skip_orig_str).resolve()
-                    if p_resolved.samefile(skip_path):
-                        should_skip = True
-                        break
-                except (FileNotFoundError, OSError):
-                    if str(p_resolved) == skip_orig_str:
-                        should_skip = True
-                        break
-
-            if not should_skip:
-                unrecognized.append(str(p_resolved))
-
-        return unrecognized
-    
     def _browse_file(self):
         filename, _ = QFileDialog.getOpenFileName(
             self, "Select PDF File", "", "PDF Files (*.pdf)"
@@ -234,17 +193,17 @@ class Ocr_fPage(QWidget):
         if not normalized_path.exists():
             normalized_path = orig_path
 
-        self.input_mode = "folder"
-        self.pdf_queue = self._get_unrecognized_pdfs(str(normalized_path))
-        if not self.pdf_queue:
+        self.session.input_mode = "folder"
+        self.session.queue = [str(p) for p in self.queue_service.get_pending(normalized_path)]
+        if not self.session.queue:
             QMessageBox.information(self, "Информация", "Все PDF уже распознаны.")
             return
 
-        self.current_index = 0
+        self.session.current_index = 0
         self.input_edit.blockSignals(True)
         self.input_edit.setText(str(normalized_path))
         self.input_edit.blockSignals(False)
-        self._load_pdf(self.pdf_queue[0])
+        self._load_pdf(self.session.queue[0])
                 
     def _finish_folder_processing(self):
         from PySide6.QtWidgets import QDialog, QPushButton, QVBoxLayout, QPlainTextEdit, QHBoxLayout
@@ -310,8 +269,10 @@ class Ocr_fPage(QWidget):
         self.template_combo.clear()
         self.template_combo.addItem("Не использовать", -1)
         templates = get_templates()
-        for idx, pattern in enumerate(templates):
-            self.template_combo.addItem(pattern, idx)
+        for idx, tpl in enumerate(templates):
+            # Показываем name, если есть, иначе pattern
+            display = tpl.get("name", tpl.get("pattern", f"Шаблон {idx+1}"))
+            self.template_combo.addItem(display, idx)
         selected_idx = get_selected_template_index()
         found = -1
         for i in range(self.template_combo.count()):
@@ -323,29 +284,21 @@ class Ocr_fPage(QWidget):
 
     def _on_template_changed(self, index):
         set_selected_template_index(self.template_combo.currentData())                
-                      
-    def _get_storage(self):
-        if self.storage is None and self.ocr_storage_enabled:
-            storage_path = Path("ocr_storage")
-            storage_path.mkdir(exist_ok=True)
-            self.storage = Storage(storage_path)
-        return self.storage
 
     def _load_pdf(self, pdf_path):
         if not pdf_path:
             return
 
-        self.current_pdf_path = pdf_path
+        self.session.pdf_path = pdf_path
+        self.session.zones = []
+        self.session.zone_texts = []
+        self.session.zone_ids = [] 
 
         self.viewer.load_pdf(pdf_path, 0)
 
-        self.selected_rects = []
-        self.ocr_results = []
-        self.zone_texts = [] 
-        
         self.ocr_info.setText("Выделено областей: 0")
         self.result_text.clear()
-        self.filename_edit.setText(Path(pdf_path).stem)        
+        self.filename_edit.setText(Path(pdf_path).stem)
 
         total_pages = self.viewer.get_total_pages()
         self.page_spin.setMaximum(total_pages if total_pages else 1)
@@ -356,16 +309,23 @@ class Ocr_fPage(QWidget):
         self.ocr_button.setEnabled(False)
         self._update_view_rects()
         self.result_text.setPlainText(f"PDF загружен:\n{pdf_path}")
-        
-        if self.is_locked and self.locked_rects:
-            self.selected_rects.clear()
-            self.zone_texts.clear()
-            self.zone_ids.clear()
-            current_page = self.viewer.current_page() + 1
-            for (x, y, w, h) in self.locked_rects:
-                self.selected_rects.append((x, y, w, h, current_page))
+
+        if self.session.locked and self.session.locked_rects:
+            self.session.zones.clear()
+            self.session.zone_texts.clear()
+            self.session.zone_ids.clear()
+            current_page = self.viewer.current_page() + 1 
+            for r in self.session.locked_rects:
+                new_region = Region(
+                    page=current_page,
+                    x=r.x,
+                    y=r.y,
+                    w=r.w,
+                    h=r.h
+                )
+                self.session.zones.append(new_region)
             self._update_view_rects()
-            self.ocr_info.setText(f"Выделено областей: {len(self.selected_rects)}")
+            self.ocr_info.setText(f"Выделено областей: {len(self.session.zones)}")
             self._run_ocr()
 
     def _on_path_changed(self, path: str):
@@ -375,22 +335,22 @@ class Ocr_fPage(QWidget):
         p = Path(path)
 
         if p.is_file():
-            self.input_mode = "file"
-            self.pdf_queue = []
-            self.current_index = -1
+            self.session.input_mode = "file"
+            self.session.queue = []
+            self.session.current_index = -1
             self._load_pdf(str(p))
             return
 
         if p.is_dir():
-            self.input_mode = "folder"
-            self.pdf_queue = self._get_unrecognized_pdfs(str(p))
-            if self.pdf_queue:
-                self.current_index = 0
-                self._load_pdf(self.pdf_queue[0])
+            self.session.input_mode = "folder"
+            self.session.queue = [str(p) for p in self.queue_service.get_pending(p)]
+            if self.session.queue:
+                self.session.current_index = 0
+                self._load_pdf(self.session.queue[0])
             else:
                 self.result_text.setPlainText("Все PDF уже распознаны.")
-                self.pdf_queue = []
-                self.current_index = -1
+                self.session.queue = []
+                self.session.current_index = -1
 
     def _change_page(self, page_num: int):
         if hasattr(self, '_changing_page') and self._changing_page:
@@ -417,145 +377,112 @@ class Ocr_fPage(QWidget):
             self.page_spin.setValue(current + 1)
 
     # ---------- Выделение областей ----------
-    def _on_rect_selected(self, x, y, w, h, page):
-        new_rect = (x, y, w, h, page)
-        self.selected_rects.append(new_rect)
-        count = len(self.selected_rects)
+    def _on_rect_selected(self, region: Region):
+        self.session.zones.append(region)
+        count = len(self.session.zones)
         self.ocr_info.setText(f"Выделено областей: {count}")
         self.ocr_button.setEnabled(count > 0)
         zone_index = count - 1
-        self.result_text.appendPlainText(f"zone{zone_index}: {new_rect}")
+        self.result_text.appendPlainText(f"zone{zone_index}: {region}")
         self._update_view_rects()
+        if self.auto_ocr_checkbox.isChecked():
+            self._run_ocr()
 
     def _undo_selection(self):
-        if not self.selected_rects:
+        if not self.session.zones:
             return
         self.viewer.remove_last_rect()
-        self.selected_rects.pop()
-        if self.zone_texts:
-            self.zone_texts.pop()
-        if self.zone_ids:
-            self.zone_ids.pop()
-        count = len(self.selected_rects)
+        self.session.zones.pop()
+        if self.session.zone_texts:
+            self.session.zone_texts.pop()
+        if self.session.zone_ids:
+            self.session.zone_ids.pop()
+        count = len(self.session.zones)
         self.ocr_info.setText(f"Выделено областей: {count}")
         self.ocr_button.setEnabled(count > 0)
         self._refresh_result_text()
         self._update_view_rects()
         
     def _on_lock_toggled(self, locked):
-        self.is_locked = locked
+        self.session.locked = locked
         if locked:
-            self.locked_rects = [(x, y, w, h) for (x, y, w, h, page) in self.selected_rects]
+            self.session.locked_rects = self.session.zones.copy()
         else:
-            self.locked_rects = []
+            self.session.locked_rects = []
             self._clear_selection()
 
     def _update_view_rects(self):
         if not hasattr(self, 'viewer') or not self.viewer:
             return
-        current_page = self.viewer.current_page()  # 0-based
-        filtered = [(x, y, w, h) for (x, y, w, h, p) in self.selected_rects if p == current_page + 1]
+        current_page = self.viewer.current_page()
+        dpi = self.viewer.get_dpi()
+        scale = dpi / 72.0 
+        filtered = [
+            (r.x * scale, r.y * scale, r.w * scale, r.h * scale)
+            for r in self.session.zones
+            if r.page == current_page + 1
+        ]
         self.viewer.set_rects(filtered)
 
     def _refresh_result_text(self):
         self.result_text.clear()
-        for idx, rect in enumerate(self.selected_rects):
-            self.result_text.appendPlainText(f"zone{idx}: {rect}")
+        for idx, region in enumerate(self.session.zones):
+            self.result_text.appendPlainText(f"zone{idx}: {region}")
 
     def _clear_selection(self):
         self.viewer.clear_selection()
-        self.selected_rects = []
-        self.zone_texts = []
-        self.zone_ids.clear()
+        self.session.zones.clear()
+        self.session.zone_texts.clear()
+        self.session.zone_ids.clear()
         self.ocr_info.setText("Выделено областей: 0")
         self.ocr_button.setEnabled(False)
         self._update_view_rects()
-
+        
     # ---------- Основной OCR ----------
     def _run_ocr(self):
-        config = load_config()
-        self.ocr_storage_enabled = config.get("ocr_storage_enabled", False)
-        
-        if not self.ocr_storage_enabled and self.storage is not None:
-            self.storage = None
-        
-        if self.ocr_backend is None:
-            try:
-                config = load_config()
-                self.ocr_backend = OCRBackend(
-                    tesseract_path=config.get("ocr_path", ""),
-                    language=config.get("language", "rus+eng")
-                )
-            except Exception as e:
-                QMessageBox.critical(self, "Ошибка OCR", str(e) + "\nУкажите путь к Tesseract в settings.json")
-                return
-        
-        if not self.current_pdf_path or not self.selected_rects:
-            QMessageBox.warning(self, "Ошибка", "Не выбран PDF или не выделена область.")
+        if self._ocr_running:
             return
+        self._ocr_running = True
+        try:
+            if not self.session.pdf_path or not self.session.zones:
+                QMessageBox.warning(self, "Ошибка", "Не выбран PDF или не выделена область.")
+                return
 
-        if self.ocr_backend is not None:
+            config = load_config()
+            self.ocr_workflow.ensure_storage(
+                enabled=config.get("ocr_storage_enabled", False),
+                storage_path=Path("ocr_storage")
+            )
+
             try:
-                self.ocr_backend.reload_from_config()
+                self.ocr_workflow.ocr.reload_from_config()
             except FileNotFoundError as e:
                 QMessageBox.critical(self, "Ошибка OCR", str(e))
                 return
 
-        self.result_text.clear()
-        self.zone_texts = []               
-        dpi = getattr(self.viewer, 'dpi', 300)
-
-        for (x, y, w, h, page) in self.selected_rects:
             try:
-                pdf_x = x / dpi * 72
-                pdf_y = y / dpi * 72
-                pdf_w = w / dpi * 72
-                pdf_h = h / dpi * 72
-
-                if pdf_w <= 0 or pdf_h <= 0:
-                    self.result_text.appendPlainText(f"Пропущена область с нулевым размером: ({x}, {y}) {w}x{h}")
-                    self.zone_texts.append("")  
-                    continue
-
-                region = Region(page=page + 1, x=pdf_x, y=pdf_y, w=pdf_w, h=pdf_h)
-                image = self.extractor.crop_region(self.current_pdf_path, region, dpi=dpi )
-
-                if image is None or image.size[0] == 0 or image.size[1] == 0:
-                    self.result_text.appendPlainText(f"Пустое изображение для области ({x}, {y})")
-                    self.zone_texts.append("")                          
-                    continue
-
-                if self.ocr_backend is None:
-                    self.result_text.appendPlainText("OCR не инициализирован.")
-                    return
-
-                text = self.ocr_backend.recognize(image)
-                clean_text = text.strip()
-                self.zone_texts.append(clean_text)
-                zone_index = len(self.zone_texts) - 1
-                self.result_text.appendPlainText(f"{{zone{zone_index}}} {clean_text}")
-                
-                storage = self._get_storage()
-                if storage is not None:
-                    image_id = storage.save_image(
-                        image=image,
-                        pdf_path=self.current_pdf_path,
-                        page=page + 1,
-                        coords={"x": x, "y": y, "w": w, "h": h},
-                        ocr_text=text
-                    )
-                    self.zone_ids.append(image_id)
-                else:
-                    self.zone_ids.append(None)
-
+                results = self.ocr_workflow.recognize_zones(
+                    pdf_path=self.session.pdf_path,
+                    regions=self.session.zones,
+                    dpi=300
+                )
             except Exception as e:
-                import traceback
-                error_text = f"Ошибка при обработке области {x},{y}: {str(e)}\n{traceback.format_exc()}"
-                self.result_text.appendPlainText(error_text)
-                self.zone_texts.append("") 
+                QMessageBox.critical(self, "Ошибка OCR", str(e))
+                return
 
+            self.session.zone_texts = [r.text for r in results]
+            self.session.zone_ids = [r.storage_id for r in results]
+
+            self.result_text.clear()
+            for idx, r in enumerate(results):
+                self.result_text.appendPlainText(f"{{zone{idx}}} {r.text}")
+
+            self.ocr_info.setText(f"Выделено областей: {len(results)}")
+        finally:
+            self._ocr_running = False
+        
     def _apply_action(self):
-        if not self.current_pdf_path:
+        if not self.session.pdf_path:
             return
 
         if hasattr(self.viewer, 'close_document'):
@@ -566,12 +493,11 @@ class Ocr_fPage(QWidget):
             except:
                 pass
 
-        old_file = Path(self.current_pdf_path)
+        old_file = Path(self.session.pdf_path)
 
         # --- 1. Парсинг исправлений из поля результата ---
         current_text = self.result_text.toPlainText()
         lines = current_text.splitlines()
-        storage = self._get_storage()
         import re
         pattern_zone = re.compile(r'\{zone(\d+)\}\s*(.*)')
         updates = {}
@@ -582,105 +508,63 @@ class Ocr_fPage(QWidget):
                 txt = match.group(2)
                 updates[idx] = txt
 
-        # Применяем изменения к zone_texts и в storage
         for idx, new_txt in updates.items():
-            if 0 <= idx < len(self.zone_texts):
-                if new_txt != self.zone_texts[idx]:
-                    self.zone_texts[idx] = new_txt
-                    if storage is not None and idx < len(self.zone_ids) and self.zone_ids[idx] is not None:
-                        try:
-                            storage.update_text(self.zone_ids[idx], new_txt, is_correction=True)
-                        except ValueError:
-                            pass  # игнорируем, если id не найден
+            if 0 <= idx < len(self.session.zone_texts):
+                if new_txt != self.session.zone_texts[idx]:
+                    self.session.zone_texts[idx] = new_txt
+                    if self.ocr_workflow.storage is not None:
+                        self.ocr_workflow.update_zone_text(self.session.zone_ids[idx], new_txt)
 
-        # --- 2. Формирование нового имени ---
+        # --- 2. Получение шаблона ---
         selected_idx = get_selected_template_index()
-        new_name = None
-        pattern = None  
-        
+        pattern = None
+        structure_pattern = None
         if selected_idx >= 0:
             templates = get_templates()
             if selected_idx < len(templates):
-                pattern = templates[selected_idx]
-                new_name = pattern
-                
-                placeholders = re.findall(r'\{zone(\d+)\}', pattern)
-                if placeholders:
-                    if not self.zone_texts:
-                        QMessageBox.warning(
-                            self,
-                            "Ошибка",
-                            "Нет распознанных зон для подстановки в шаблон."
-                        )
-                        return
-                    if len(set(placeholders)) != len(self.zone_texts):
-                        QMessageBox.warning(
-                            self,
-                            "Ошибка",
-                            f"Шаблон требует: {len(set(placeholders))}, но распознано {len(self.zone_texts)} зон."
-                        )
-                        return
-                # Подстановка текстов в шаблон
-                for i, text in enumerate(self.zone_texts):
-                    placeholder = f"{{zone{i}}}"
-                    if placeholder in new_name:
-                        new_name = new_name.replace(placeholder, text)
+                tpl = templates[selected_idx]
+                pattern = tpl.get("pattern")
+                structure_pattern = tpl.get("structure")
             else:
-                # Если индекс некорректен, сбрасываем выбор
                 set_selected_template_index(-1)
-                new_name = self.filename_edit.text().strip()
-        else:
-            new_name = self.filename_edit.text().strip()
 
-        if not new_name:
-            new_name = old_file.stem
+        # --- 3. Переименование и обновление manifest через сервис ---
+        try:
+            new_file = self.file_workflow.apply_rename(
+                pdf_path=old_file,
+                zone_texts=self.session.zone_texts,
+                template_pattern=pattern,
+                manual_name=self.filename_edit.text().strip()
+            )
+            self.session.pdf_path = str(new_file)
 
-        # --- 3. Переименование ---
-        new_file = old_file
-        if new_name != old_file.stem:
-            if not new_name.lower().endswith(".pdf"):
-                new_name += ".pdf"
-            new_file = old_file.parent / new_name
-            try:
-                old_file.rename(new_file)
-                self.current_pdf_path = str(new_file)
-            except Exception as e:
-                QMessageBox.critical(self, "Ошибка", f"Не удалось переименовать файл:\n{e}")
-                return
-            else:
-                new_file = old_file
-            
-        manifest_path = find_manifest(old_file)
-        if manifest_path:
-            ocr_info = {
-                "is_recognized": bool(self.zone_texts), 
-                "new_name": new_name,  
-                "used_template": pattern
-            }
-            update_manifest_for_file(manifest_path, old_file, ocr_info)           
+            self.file_workflow.update_manifest(
+                old_path=old_file,
+                new_path=new_file,
+                template_pattern=pattern,
+                zone_texts=self.session.zone_texts,
+                structure_pattern=structure_pattern   # новое
+            )
+        except ValueError as e:
+            QMessageBox.warning(self, "Ошибка", str(e))
+            return
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось переименовать файл:\n{e}")
+            return
 
-        # --- 5. Переход к следующему PDF (если папка) ---
-        if self.input_mode == "folder":
-            self.current_index += 1
-            if self.current_index < len(self.pdf_queue):
-                next_pdf = self.pdf_queue[self.current_index]
+        # --- 4. Переход к следующему PDF (если папка) ---
+        if self.session.input_mode == "folder":
+            self.session.current_index += 1
+            if self.session.current_index < len(self.session.queue):
+                next_pdf = self.session.queue[self.session.current_index]
                 self._load_pdf(next_pdf)
             else:
                 self._finish_folder_processing()
 
-
-
     def _reset_state(self):
-        self.current_pdf_path = None
-        self.pdf_queue = []
-        self.current_index = -1
-        self.input_mode = None
-
-        self.selected_rects.clear()
-        self.ocr_results.clear()
-        self.zone_texts.clear()
-        self.zone_ids.clear()
-
+        # Создаём новую сессию
+        self.session = OCRSession()
+        
         self.input_edit.blockSignals(True)
         self.input_edit.clear()
         self.input_edit.blockSignals(False)
@@ -697,18 +581,14 @@ class Ocr_fPage(QWidget):
 
         self.result_text.clear()
 
-        self.ocr_info.setText(
-            "Выделено областей: 0"
-        )
+        self.ocr_info.setText("Выделено областей: 0")
 
         self.page_spin.blockSignals(True)
         self.page_spin.setMaximum(1)
         self.page_spin.setValue(1)
         self.page_spin.blockSignals(False)
 
-        self.page_info.setText(
-            "Страница 1 из 1"
-        )
+        self.page_info.setText("Страница 1 из 1")
 
         self.prev_btn.setEnabled(False)
         self.next_btn.setEnabled(False)

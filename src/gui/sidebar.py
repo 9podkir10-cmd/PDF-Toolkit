@@ -14,6 +14,7 @@ class Sidebar(QWidget):
     index_clicked = Signal()
     split_clicked = Signal()
     scan_clicked = Signal()
+    forms_clicked = Signal()
     settings_clicked = Signal()
 
     def __init__(self):
@@ -41,6 +42,7 @@ class Sidebar(QWidget):
         self.index_button = QPushButton("Index")
         self.split_button = QPushButton("Split")
         self.scan_button = QPushButton("Scan")
+        self.forms_button = QPushButton("Forms")
         self.settings_button = QPushButton("Settings")
 
         buttons = [
@@ -48,7 +50,8 @@ class Sidebar(QWidget):
             (self.export_button, self.export_clicked),
             (self.index_button, self.index_clicked),
             (self.split_button, self.split_clicked),        
-            (self.scan_button, self.scan_clicked)
+            (self.scan_button, self.scan_clicked),
+            (self.forms_button, self.forms_clicked)
         ]
 
         for button, signal in buttons:

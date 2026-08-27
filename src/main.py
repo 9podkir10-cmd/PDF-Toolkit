@@ -19,7 +19,7 @@ def parse_arguments():
 
 
 def show_version():
-    version = "1.0.3"
+    version = "1.0.4"
     print(f"PDF-Toolkit v{version}")
 
 

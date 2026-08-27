@@ -5,10 +5,10 @@ from PySide6.QtWidgets import (
     QGraphicsRectItem, QVBoxLayout, QHBoxLayout, QPushButton, QButtonGroup
 )
 import fitz
-
+from backend.services.box_to_img import Region  # <-- импорт
 
 class PDFGraphicsView(QGraphicsView):
-    rect_selected = Signal(int, int, int, int, int)
+    rect_selected = Signal(Region)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -86,6 +86,9 @@ class PDFGraphicsView(QGraphicsView):
     def current_page(self):
         return self.current_page_num
     
+    def get_dpi(self):
+        return self.dpi
+
     def get_total_pages(self) -> int:
         return self.doc.page_count if self.doc else 0
 
@@ -133,8 +136,18 @@ class PDFGraphicsView(QGraphicsView):
                 permanent_item.setPen(pen)
                 self.scene.addItem(permanent_item)
                 self.drawn_items.append(permanent_item)
-                page_num_display = self.current_page_num + 1
-                self.rect_selected.emit(int(x), int(y), int(w), int(h), page_num_display)
+
+                # Преобразование в PDF-координаты
+                scale = 72 / self.dpi
+                region = Region(
+                    page=self.current_page_num + 1,
+                    x=x * scale,
+                    y=y * scale,
+                    w=w * scale,
+                    h=h * scale
+                )
+                self.rect_selected.emit(region)
+
                 self.scene.removeItem(self.rubber_band)
                 self.rubber_band = None
                 self.origin = None
@@ -182,9 +195,8 @@ class PDFGraphicsView(QGraphicsView):
             self.setDragMode(QGraphicsView.NoDrag)
 
 class PDFViewer(QWidget):
-    rect_selected = Signal(int, int, int, int, int)
-    lock_toggled = Signal(bool)
-
+    rect_selected = Signal(Region)
+    lock_toggled = Signal(bool)     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.view = PDFGraphicsView(self)
@@ -192,11 +204,11 @@ class PDFViewer(QWidget):
 
         # Тулбар
         self.toolbar = QHBoxLayout()
-        self.toolbar.addStretch()  
+        self.toolbar.addStretch()
         self.btn_hand = QPushButton("move")
         self.btn_select = QPushButton("pick")
-        self.btn_lock = QPushButton("Lock") 
-        self.btn_lock.setCheckable(True)  
+        self.btn_lock = QPushButton("Lock")
+        self.btn_lock.setCheckable(True)
         self.btn_hand.setCheckable(True)
         self.btn_select.setCheckable(True)
         self.btn_select.setChecked(True)
@@ -208,7 +220,7 @@ class PDFViewer(QWidget):
 
         self.toolbar.addWidget(self.btn_hand)
         self.toolbar.addWidget(self.btn_select)
-        self.toolbar.addWidget(self.btn_lock)     
+        self.toolbar.addWidget(self.btn_lock)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -233,7 +245,7 @@ class PDFViewer(QWidget):
 
     def set_lock_mode(self, locked):
         self.btn_select.setEnabled(not locked)
-        self.btn_hand.setEnabled(True) 
+        self.btn_hand.setEnabled(True)
         if locked:
             self.btn_hand.setChecked(True)
             self.view.set_mode("hand")
@@ -265,7 +277,10 @@ class PDFViewer(QWidget):
 
     def wheelEvent(self, event):
         self.view.wheelEvent(event)
-        
+
+    def get_dpi(self):
+        return self.view.get_dpi()
+
     def set_rects(self, rects):
         self.view.set_rects(rects)
 

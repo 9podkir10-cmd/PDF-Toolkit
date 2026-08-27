@@ -73,3 +73,20 @@ def update_manifest_after_structure(manifest_path: Path, file_key: str, new_path
     with open(manifest_path, 'w', encoding='utf-8') as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
     return True
+
+def load_manifest(folder: Path) -> Dict[str, Any]:
+    manifest_path = folder / "manifest.json"
+    if not manifest_path.exists():
+        return {}
+    with open(manifest_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+def is_ocr_recognized(manifest: Dict[str, Any], filename: str) -> bool:
+
+    entry = manifest.get('unique', {}).get(filename)
+    if not entry:
+        entry = manifest.get('duplicates', {}).get(filename)
+    if not entry:
+        return False
+    ocr = entry.get('ocr', {})
+    return ocr.get('is_recognized', False)

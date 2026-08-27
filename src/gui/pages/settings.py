@@ -185,76 +185,116 @@ class SettingsPage(QWidget):
     def _load_templates_list(self):
         self.templates_list.clear()
         templates = get_templates()
-        for pattern in templates:
-            self.templates_list.addItem(pattern)
+        for idx, tpl in enumerate(templates):
+            if isinstance(tpl, dict):
+                display = tpl.get("name", tpl.get("pattern", f"Шаблон {idx+1}"))
+            else:
+                display = str(tpl)
+            self.templates_list.addItem(display)
 
     def _add_template(self):
-        pattern = self._show_pattern_dialog("Add Template", "")
-        if pattern is not None:
+        result = self._show_template_dialog("Добавить шаблон")
+        if result is not None:
             templates = get_templates()
-            templates.append(pattern)
+            templates.append(result)
             if save_templates(templates):
                 self._load_templates_list()
-                app_signals.templates_changed.emit() 
+                app_signals.templates_changed.emit()
             else:
-                QMessageBox.critical(self, "Error", "Failed to save template.")
+                QMessageBox.critical(self, "Ошибка", "Не удалось сохранить шаблон.")
 
     def _edit_template(self):
         current_row = self.templates_list.currentRow()
         if current_row < 0:
-            QMessageBox.warning(self, "Warning", "Select a template to edit.")
+            QMessageBox.warning(self, "Предупреждение", "Выберите шаблон для редактирования.")
             return
         templates = get_templates()
-        old_pattern = templates[current_row]
-        new_pattern = self._show_pattern_dialog("Edit Template", old_pattern)
-        if new_pattern is not None and new_pattern != old_pattern:
-            templates[current_row] = new_pattern
+        old = templates[current_row]
+        result = self._show_template_dialog(
+            "Редактировать шаблон",
+            initial_name=old.get("name", ""),
+            initial_pattern=old.get("pattern", ""),
+            initial_structure=old.get("structure", "")
+        )
+        if result is not None:
+            templates[current_row] = result
             if save_templates(templates):
                 self._load_templates_list()
-                app_signals.templates_changed.emit() 
+                app_signals.templates_changed.emit()
+                # Если выбранный индекс был на этом шаблоне, можно оставить
             else:
-                QMessageBox.critical(self, "Error", "Failed to edit template.")
+                QMessageBox.critical(self, "Ошибка", "Не удалось сохранить изменения.")
 
     def _delete_template(self):
         current_row = self.templates_list.currentRow()
         if current_row < 0:
-            QMessageBox.warning(self, "Warning", "Select a template to delete.")
+            QMessageBox.warning(self, "Предупреждение", "Выберите шаблон для удаления.")
             return
-        reply = QMessageBox.question(self, "Delete", "Delete selected template?",
-                                     QMessageBox.Yes | QMessageBox.No)
+        reply = QMessageBox.question(self, "Удаление", "Удалить выбранный шаблон?",
+                                    QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
             templates = get_templates()
             del templates[current_row]
             if save_templates(templates):
                 self._load_templates_list()
-                app_signals.templates_changed.emit() 
+                app_signals.templates_changed.emit()
+                # Если удалён выбранный индекс, сбросить выбор
                 selected = get_selected_template_index()
                 if selected == current_row or selected >= len(templates):
                     set_selected_template_index(-1)
             else:
-                QMessageBox.critical(self, "Error", "Failed to delete template.")
+                QMessageBox.critical(self, "Ошибка", "Не удалось удалить шаблон.")
 
-    def _show_pattern_dialog(self, title: str, initial: str) -> Optional[str]:
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QDialogButtonBox
+    def _show_template_dialog(self, title: str, initial_name: str = "",
+                            initial_pattern: str = "",
+                            initial_structure: str = "") -> dict | None:
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QDialogButtonBox, QLabel
+
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
-        dialog.setMinimumWidth(600)     
+        dialog.setMinimumWidth(600)
         layout = QVBoxLayout(dialog)
-        pattern_edit = QLineEdit(initial)
-        pattern_edit.setPlaceholderText("e.g. Договор №{zone0}")
-        layout.addWidget(QLabel("Шаблон (используйте {zone0}, {zone1}, ...):"))
+
+        # Поле Name
+        layout.addWidget(QLabel("Название шаблона (отображается в списке):"))
+        name_edit = QLineEdit(initial_name)
+        name_edit.setPlaceholderText("Например: Счет-фактура")
+        layout.addWidget(name_edit)
+
+        # Поле Pattern
+        layout.addWidget(QLabel("Шаблон переименования (используйте {zone0}, {zone1}, ...):"))
+        pattern_edit = QLineEdit(initial_pattern)
+        pattern_edit.setPlaceholderText("Например: Счет {zone0} от {zone1}")
         layout.addWidget(pattern_edit)
+
+        # Поле Structure
+        layout.addWidget(QLabel("Шаблон структуры папок (оставьте пустым, если не нужно):"))
+        structure_edit = QLineEdit(initial_structure)
+        structure_edit.setPlaceholderText("Например: {zone0}/{zone1} или Счета/{zone0}")
+        layout.addWidget(structure_edit)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
 
         if dialog.exec() == QDialog.Accepted:
-            text = pattern_edit.text().strip()
-            if not text:
-                QMessageBox.warning(self, "Error", "Pattern cannot be empty.")
+            name = name_edit.text().strip()
+            pattern = pattern_edit.text().strip()
+            structure = structure_edit.text().strip() or None
+
+            if not name:
+                QMessageBox.warning(self, "Ошибка", "Название шаблона не может быть пустым.")
                 return None
-            return text
+            if not pattern:
+                QMessageBox.warning(self, "Ошибка", "Шаблон переименования не может быть пустым.")
+                return None
+
+            return {
+                "name": name,
+                "pattern": pattern,
+                "structure": structure
+            }
         return None
 
     def _load_profiles_list(self):
@@ -417,7 +457,5 @@ class SettingsPage(QWidget):
         
         success = save_main_settings(ocr_path, lang_str, ocr_storage_enabled)
         
-        if success:
-            print(f"Settings saved to: {get_config_path()}")
-        else:
+        if not success:
             QMessageBox.critical(self, "Error", "Failed to save configuration!")        

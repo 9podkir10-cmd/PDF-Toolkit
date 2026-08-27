@@ -9,10 +9,10 @@ class DashboardPage(QWidget):
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setContentsMargins(30, 30, 30, 30)
         layout.setSpacing(20)
 
         title = QLabel("Dashboard")
-        title.setStyleSheet("font-size: 24px; font-weight: bold;")
+        title.setStyleSheet("font-size: 12px")
         layout.addWidget(title)

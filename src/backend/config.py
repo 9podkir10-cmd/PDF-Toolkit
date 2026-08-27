@@ -61,21 +61,6 @@ def load_config(force_reload: bool = False) -> dict:
     _config_cache = defaults.copy()
     return _config_cache
 
-# def save_config(updates: dict) -> bool:
-#     global _config_cache
-#     config_path = get_config_path()
-#     current = load_config()
-#     current.update(updates)
-    
-#     try:
-#         with open(config_path, 'w', encoding='utf-8') as f:
-#             json.dump(current, f, indent=4, ensure_ascii=False)
-#         _config_cache = current
-#         return True
-#     except IOError as e:
-#         print(f"Ошибка записи конфига: {e}")
-#         return False
-
 def save_main_settings(ocr_path: str, language: str, ocr_storage_enabled: bool) -> bool:
     return save_config({
         "ocr_path": ocr_path,
@@ -83,8 +68,32 @@ def save_main_settings(ocr_path: str, language: str, ocr_storage_enabled: bool) 
         "ocr_storage_enabled": ocr_storage_enabled
     })
 
-def save_templates(templates: list) -> bool:
-    return save_config({"templates": templates})
+def get_templates() -> list[dict]:
+    config = load_config()
+    templates = config.get("templates", [])
+    if templates and isinstance(templates[0], str):
+        new_templates = []
+        for i, pattern in enumerate(templates):
+            new_templates.append({
+                "name": pattern,
+                "pattern": pattern,
+                "structure": None
+            })
+        templates = new_templates
+        config["templates"] = templates
+        save_config(config)
+    return templates
+
+def save_templates(templates: list[dict]) -> bool:
+    config = load_config()
+    config["templates"] = templates
+    return save_config(config)
+
+def get_template_structure(index: int) -> str | None:
+    templates = get_templates()
+    if 0 <= index < len(templates):
+        return templates[index].get("structure")
+    return None
 
 def set_selected_template_index(index: int) -> bool:
     return save_config({"selected_template_index": index})

@@ -23,7 +23,7 @@ class OCRService:
         for r in regions:
             pdf_regions.append(
                 Region(
-                    page=r['page'] + 1,
+                    page=r['page'],
                     x=r['rect_pdf'].x0,
                     y=r['rect_pdf'].y0,
                     w=r['rect_pdf'].width,

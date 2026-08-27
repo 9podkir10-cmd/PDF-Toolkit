@@ -1,4 +1,3 @@
-# extract_pages.py
 import fitz
 from PIL import Image
 from io import BytesIO
@@ -22,7 +21,7 @@ class PDFExtractor:
     ) -> Image.Image:
         doc = fitz.open(pdf_path)
         try:
-            page = doc[region.page - 2]  # fitz нумерует с 0
+            page = doc[region.page - 1]
             rect = fitz.Rect(
                 region.x,
                 region.y,

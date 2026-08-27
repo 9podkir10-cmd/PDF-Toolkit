@@ -1,4 +1,4 @@
-# PDF-Toolkit v1.0.3
+# PDF-Toolkit v1.0.4
 
 [![Python Version](https://img.shields.io/badge/python-3.9+-blue?style=for-the-badge)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
@@ -15,10 +15,11 @@ PDF-Toolkit — утилита для обработки PDF: извлечени
 3. Запустите `PDF-Toolkit.exe`.
 4. Укажите путь к Tesseract OCR (если используете) через настройки GUI.
 
-## Что нового в версии v1.0.3?
+## Что нового в версии v1.0.4?
 
 - Доработана механика выделения областей на изображениях
 - Исправление ошибок
+- Демо сканирования
 
 ## Функционал
 
@@ -169,9 +170,8 @@ python main.py --gui
 
 ## Планируемые изменения
 
-- Добавление шаблонов областей распознавания.
 - Поддержка альтернативных движков OCR.
-- Настроить сканирование.
+- Перенос некоторого функционала на C++
 
 ## Лицензия
 

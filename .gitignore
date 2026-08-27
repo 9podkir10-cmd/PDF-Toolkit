@@ -26,7 +26,6 @@ tmp/
 *.tmp
 *.bak
 *.swp
-*.spec
 htmlcov/
 .coverage
 .tox/
