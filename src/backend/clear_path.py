@@ -7,6 +7,8 @@ from datetime import datetime
 import re
 import json
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import multiprocessing
 
 class DirectoryNormalizer:
     def __init__(self, source_dir: str):
@@ -19,6 +21,8 @@ class DirectoryNormalizer:
             raise Exception(f"В папке {self.source_dir} нет PDF файлов!")
         
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        self.max_workers = min(32, (multiprocessing.cpu_count() or 1) + 4)
     
     def _calculate_file_hash(self, file_path: Path, bytes_count: int = None) -> str:
         hash_sha256 = hashlib.sha256()
@@ -28,7 +32,7 @@ class DirectoryNormalizer:
                     chunk = f.read(bytes_count)
                     hash_sha256.update(chunk)
                 else:
-                    for chunk in iter(lambda: f.read(4096), b""):
+                    for chunk in iter(lambda: f.read(65536), b""):
                         hash_sha256.update(chunk)
             return hash_sha256.hexdigest()
         except Exception:
@@ -38,15 +42,12 @@ class DirectoryNormalizer:
         try:
             with open(file1_path, 'rb') as f1, open(file2_path, 'rb') as f2:
                 while True:
-                    chunk1 = f1.read(8192)
-                    chunk2 = f2.read(8192)
-                    
+                    chunk1 = f1.read(65536)
+                    chunk2 = f2.read(65536)
                     if len(chunk1) != len(chunk2):
                         return False
-                    
                     if chunk1 != chunk2:
                         return False
-                    
                     if not chunk1:
                         return True
         except Exception:
@@ -66,43 +67,35 @@ class DirectoryNormalizer:
     
     def _discover_all_pdfs(self) -> List[Dict]:
         pdf_files = []
-        
         for pdf_path in self.source_dir.rglob("*.pdf"):
             if pdf_path.suffix.lower() == '.pdf' and pdf_path.is_file():
                 try:
                     if self.output_dir in pdf_path.parents:
                         continue
-                    
                     file_size = pdf_path.stat().st_size
                     if file_size == 0:
                         continue
-                    
                     pdf_files.append({
                         'path': pdf_path,
                         'size': file_size,
                     })
                 except Exception:
                     continue
-        
         return pdf_files
     
     def _generate_filename(self, file_info: dict, stage: int, hash_value: str = None) -> str:
         stem = file_info['path'].stem
         size = file_info['size']
-        
         if stage == 1:
             return f"{stem}_{size}.pdf"
-        
         elif stage == 2:
             partial_hash = hash_value
             return f"{stem}_{size}_{partial_hash[:8]}.pdf"
-        
         elif stage in (3, 4):
             return f"{hash_value}.pdf"
-        
         else:
-            raise ValueError(f"Неизвестный этап: {stage}")    
-        
+            raise ValueError(f"Неизвестный этап: {stage}")
+    
     def _add_to_manifest(self, manifest: dict, file_info: dict, new_name: str, 
                         stage: int, hash_value: str = None, is_duplicate: bool = False,
                         links_to: str = None) -> None:
@@ -124,7 +117,7 @@ class DirectoryNormalizer:
                 'is_duplicate': False,
                 'stage': stage
             }
-            manifest['stats']['unique'] += 1 
+            manifest['stats']['unique'] += 1
     
     def _stage1_group_by_size(self) -> Dict:
         size_groups = defaultdict(list)
@@ -134,6 +127,8 @@ class DirectoryNormalizer:
 
     def _stage2_partial_hash(self, size_groups: Dict, manifest: Dict) -> Dict:
         partial_hash_groups = defaultdict(list)
+        files_to_hash = []  # список (size_key, file_info) для параллельной обработки
+        
         for size_key, files in size_groups.items():
             if len(files) == 1:
                 file_info = files[0]
@@ -143,14 +138,28 @@ class DirectoryNormalizer:
                 self._add_to_manifest(manifest, file_info, new_name, stage=1)
             else:
                 for file_info in files:
-                    partial_hash = self._calculate_file_hash(file_info['path'], 4096)
-                    if partial_hash:
-                        key = f"{size_key}_{partial_hash}"
-                        partial_hash_groups[key].append(file_info)
+                    files_to_hash.append((size_key, file_info))
+        
+        if not files_to_hash:
+            return partial_hash_groups
+        
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            future_to_info = {
+                executor.submit(self._calculate_file_hash, info['path'], 4096): (key, info)
+                for key, info in files_to_hash
+            }
+            for future in as_completed(future_to_info):
+                size_key, file_info = future_to_info[future]
+                partial_hash = future.result()
+                if partial_hash:
+                    group_key = f"{size_key}_{partial_hash}"
+                    partial_hash_groups[group_key].append(file_info)      
         return partial_hash_groups
 
     def _stage3_full_hash(self, partial_hash_groups: Dict, manifest: Dict) -> Dict:
         full_hash_groups = defaultdict(list)
+        files_to_hash = []
+        
         for key, files in partial_hash_groups.items():
             if len(files) == 1:
                 file_info = files[0]
@@ -161,9 +170,21 @@ class DirectoryNormalizer:
                 self._add_to_manifest(manifest, file_info, new_name, stage=2, hash_value=partial_hash)
             else:
                 for file_info in files:
-                    full_hash = self._calculate_file_hash(file_info['path'])
-                    if full_hash:
-                        full_hash_groups[full_hash].append(file_info)
+                    files_to_hash.append(file_info)
+        
+        if not files_to_hash:
+            return full_hash_groups
+        
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            future_to_info = {
+                executor.submit(self._calculate_file_hash, info['path']): info
+                for info in files_to_hash
+            }
+            for future in as_completed(future_to_info):
+                file_info = future_to_info[future]
+                full_hash = future.result()
+                if full_hash:
+                    full_hash_groups[full_hash].append(file_info)
         return full_hash_groups
 
     def _stage4_byte_by_byte(self, full_hash_groups: Dict, manifest: Dict) -> None:
@@ -182,7 +203,6 @@ class DirectoryNormalizer:
     def _separate_unique_and_duplicates(self, files: List[Dict]) -> tuple:
         unique_files = []
         duplicate_pairs = []
-        
         for file_info in files:
             is_duplicate = False
             for unique_file in unique_files:
@@ -190,23 +210,19 @@ class DirectoryNormalizer:
                     is_duplicate = True
                     duplicate_pairs.append((file_info, unique_file))
                     break
-            
             if not is_duplicate:
                 unique_files.append(file_info)
-        
         return unique_files, duplicate_pairs
 
     def _process_unique_files(self, unique_files: List[Dict], full_hash: str, manifest: Dict) -> None:
         for file_info in unique_files:
             new_name = self._generate_filename(file_info, stage=4, hash_value=full_hash)
             target_path = self.output_dir / new_name
-            
             counter = 0
             while target_path.exists():
                 counter += 1
                 new_name = f"{full_hash}_{counter}.pdf"
                 target_path = self.output_dir / new_name
-            
             self._create_hardlink(file_info['path'], target_path)
             self._add_to_manifest(manifest, file_info, new_name, stage=4, hash_value=full_hash)
             file_info['unique_name'] = new_name
@@ -219,11 +235,9 @@ class DirectoryNormalizer:
                 if uf['path'] == original_file['path']:
                     original_name = uf.get('unique_name')
                     break
-            
             if original_name and original_name in manifest['unique']:
                 dup_counter = len(manifest['unique'][original_name].get('linked_files', [])) + 1
                 dup_name = f"{full_hash}_dup{dup_counter}.pdf"
-                
                 self._add_to_manifest(
                     manifest, file_info, dup_name, stage=4,
                     hash_value=full_hash, is_duplicate=True, links_to=original_name
@@ -248,7 +262,7 @@ class DirectoryNormalizer:
                 }
             }
 
-        self.output_dir.mkdir(parents=True, exist_ok=True)      
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         manifest = {
             'source_dir': self.source_dir.as_posix(),
             'output_dir': self.output_dir.as_posix(),
@@ -259,7 +273,7 @@ class DirectoryNormalizer:
                 'duplicates': 0,
                 'errors': 0
             },
-            'duplicates': {},            
+            'duplicates': {},
             'unique': {}
         }
         

@@ -1,9 +1,8 @@
 .venv/
-venv/
-env/
+.vscode/
 __pycache__/
 *.pyc
-*.pyo
+*.json
 *.pyd
 .pytest_cache/
 .mypy_cache/
@@ -17,10 +16,8 @@ build/
 *.egg-info/
 *.egg
 output/
-Итоги/
 *.log
 Tesseract-OCR/
-first_try/
 temp/
 tmp/
 *.tmp
@@ -30,7 +27,6 @@ htmlcov/
 .coverage
 .tox/
 tests/
-settings.json
 data/
 dlls/
 ocr_storage/

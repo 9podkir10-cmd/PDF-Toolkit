@@ -12,51 +12,46 @@ from pyzbar.pyzbar import decode, ZBarSymbol
 NUM_WORKERS = max(1, cpu_count() - 1)
 ZOOM_LEVEL = 2.0
 
-def check_code39_on_page(page_data, target_codes):
+def check_code39_on_page(pdf_path, page_num, target_codes):
     try:
-        page_bytes, page_num, pdf_path = page_data
-        
-        doc = fitz.open("pdf", page_bytes)
-        if len(doc) == 0:
+        # Открываем PDF непосредственно в воркере
+        with fitz.open(pdf_path) as doc:
+            if page_num >= len(doc):
+                return (pdf_path, page_num, False)
+            page = doc[page_num]
+            
+            mat = fitz.Matrix(ZOOM_LEVEL, ZOOM_LEVEL)
+            pix = page.get_pixmap(matrix=mat)
+            
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            img_np = np.array(img)
+            
+            if len(img_np.shape) == 3:
+                gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+            else:
+                gray = img_np
+            
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            enhanced = clahe.apply(gray)
+            
+            barcodes = decode(
+                Image.fromarray(enhanced),
+                symbols=[ZBarSymbol.CODE39]
+            )
+            
+            for barcode in barcodes:
+                try:
+                    barcode_data = barcode.data.decode('utf-8').strip()
+                    barcode_clean = barcode_data.replace(" ", "").upper()
+                    for target in target_codes:
+                        target_clean = target.replace(" ", "").upper()
+                        if barcode_clean == target_clean:
+                            return (pdf_path, page_num, True)
+                except Exception:
+                    continue
+            
             return (pdf_path, page_num, False)
-        
-        page = doc[0]
-        
-        mat = fitz.Matrix(ZOOM_LEVEL, ZOOM_LEVEL)
-        pix = page.get_pixmap(matrix=mat)
-        
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        img_np = np.array(img)
-        
-        if len(img_np.shape) == 3:
-            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-        else:
-            gray = img_np
-        
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        enhanced = clahe.apply(gray)
-        
-        barcodes = decode(
-            Image.fromarray(enhanced),
-            symbols=[ZBarSymbol.CODE39]
-        )
-        
-        doc.close()
-        
-        for barcode in barcodes:
-            try:
-                barcode_data = barcode.data.decode('utf-8').strip()
-                barcode_clean = barcode_data.replace(" ", "").upper()
-                
-                for target in target_codes:
-                    target_clean = target.replace(" ", "").upper()
-                    if barcode_clean == target_clean:
-                        return (pdf_path, page_num, True)
-            except Exception:
-                continue
-        
-        return (pdf_path, page_num, False)
-        
+            
     except Exception:
         return (pdf_path, page_num, False)
 
@@ -65,25 +60,16 @@ def find_code39_pages_parallel(pdf_path, target_codes):
     try:
         doc = fitz.open(pdf_path)
         total_pages = len(doc)
+        doc.close()
     except Exception:
         return pdf_path, []
-    
-    page_data_list = []
-    for page_num in range(total_pages):
-        single_page_doc = fitz.open()
-        single_page_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
-        page_bytes = single_page_doc.write()
-        single_page_doc.close()
-        page_data_list.append((page_bytes, page_num, pdf_path))
-    
-    doc.close()
     
     barcode_pages = []
     
     with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
         future_to_page = {
-            executor.submit(check_code39_on_page, page_data, target_codes): page_data[1]
-            for page_data in page_data_list
+            executor.submit(check_code39_on_page, pdf_path, page_num, target_codes): page_num
+            for page_num in range(total_pages)
         }
         
         for future in as_completed(future_to_page):
@@ -151,7 +137,7 @@ def process_single_pdf_file(pdf_path, target_codes, output_dir=None):
     if not barcode_pages:
         return []
     
-    created_files = split_pdf_by_code39(pdf_path, barcode_pages, output_dir)
+    created_files = split_pdf_by_code39(file_path, barcode_pages, output_dir)
     return created_files
 
 
