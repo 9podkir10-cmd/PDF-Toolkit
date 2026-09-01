@@ -2,11 +2,11 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
-import fitz
+import pymupdf
 
 
 def extract_metadata(pdf_path: Path, record_id: int = None) -> dict:
-    doc = fitz.open(pdf_path)
+    doc = pymupdf.open(pdf_path)
     pages = len(doc)
     doc.close()
     
@@ -36,7 +36,7 @@ def scan_and_export(
     if input_path.is_file() and input_path.suffix.lower() == '.pdf':
         pdf_files = [input_path]
     elif input_path.is_dir():
-        pdf_files = list(input_path.rglob("*.pdf"))
+        pdf_files = list(input_path.rglob("*.pdf", case_sensitive=False))
     else:
         raise ValueError("Путь должен быть папкой или PDF файлом")
     

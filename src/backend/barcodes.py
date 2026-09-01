@@ -3,173 +3,189 @@ import sys
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import cpu_count
-import fitz
+import math
+import pymupdf
 import cv2
 import numpy as np
 from PIL import Image
 from pyzbar.pyzbar import decode, ZBarSymbol
 
 NUM_WORKERS = max(1, cpu_count() - 1)
-ZOOM_LEVEL = 2.0
+ZOOM_LEVEL = 1.5
+CHUNK_SIZE = 50  # количество страниц в одной задаче
 
-def check_code39_on_page(pdf_path, page_num, target_codes):
+
+def process_page_batch(pdf_path, page_numbers, target_codes):
+    found_pages = []
     try:
-        # Открываем PDF непосредственно в воркере
-        with fitz.open(pdf_path) as doc:
-            if page_num >= len(doc):
-                return (pdf_path, page_num, False)
-            page = doc[page_num]
-            
-            mat = fitz.Matrix(ZOOM_LEVEL, ZOOM_LEVEL)
-            pix = page.get_pixmap(matrix=mat)
-            
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            img_np = np.array(img)
-            
-            if len(img_np.shape) == 3:
-                gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-            else:
-                gray = img_np
-            
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-            enhanced = clahe.apply(gray)
-            
-            barcodes = decode(
-                Image.fromarray(enhanced),
-                symbols=[ZBarSymbol.CODE39]
-            )
-            
-            for barcode in barcodes:
-                try:
-                    barcode_data = barcode.data.decode('utf-8').strip()
-                    barcode_clean = barcode_data.replace(" ", "").upper()
-                    for target in target_codes:
-                        target_clean = target.replace(" ", "").upper()
-                        if barcode_clean == target_clean:
-                            return (pdf_path, page_num, True)
-                except Exception:
+        with pymupdf.open(pdf_path) as doc:
+            for page_num in page_numbers:
+                if page_num >= len(doc):
                     continue
-            
-            return (pdf_path, page_num, False)
-            
+                page = doc[page_num]
+
+                mat = pymupdf.Matrix(ZOOM_LEVEL, ZOOM_LEVEL)
+                pix = page.get_pixmap(matrix=mat)
+
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                img_np = np.array(img)
+
+                if len(img_np.shape) == 3:
+                    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+                else:
+                    gray = img_np
+
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                enhanced = clahe.apply(gray)
+
+                barcodes = decode(
+                    Image.fromarray(enhanced),
+                    symbols=[ZBarSymbol.CODE39]
+                )
+
+                for barcode in barcodes:
+                    try:
+                        barcode_data = barcode.data.decode('utf-8').strip()
+                        barcode_clean = barcode_data.replace(" ", "").upper()
+                        for target in target_codes:
+                            target_clean = target.replace(" ", "").upper()
+                            if barcode_clean == target_clean:
+                                found_pages.append(page_num)
+                                break
+                        else:
+                            continue
+                        break  # если найден, прерываем проверку других штрихкодов на этой странице
+                    except Exception:
+                        continue
     except Exception:
-        return (pdf_path, page_num, False)
+        pass
+    return found_pages
 
 
-def find_code39_pages_parallel(pdf_path, target_codes):
+def find_code39_pages_parallel(pdf_path, target_codes, max_workers=None):
     try:
-        doc = fitz.open(pdf_path)
+        doc = pymupdf.open(pdf_path)
         total_pages = len(doc)
         doc.close()
     except Exception:
         return pdf_path, []
-    
-    barcode_pages = []
-    
-    with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
-        future_to_page = {
-            executor.submit(check_code39_on_page, pdf_path, page_num, target_codes): page_num
-            for page_num in range(total_pages)
-        }
-        
-        for future in as_completed(future_to_page):
-            _, page_num, has_barcode = future.result()
-            if has_barcode:
-                barcode_pages.append(page_num)
-    
-    barcode_pages.sort()
-    return pdf_path, barcode_pages
+
+    if total_pages == 0:
+        return pdf_path, []
+
+    workers = max_workers or NUM_WORKERS
+    workers = min(workers, total_pages)
+
+    chunk_size = max(1, min(CHUNK_SIZE, math.ceil(total_pages / workers)))
+    page_numbers = list(range(total_pages))
+    chunks = [page_numbers[i:i + chunk_size] for i in range(0, total_pages, chunk_size)]
+
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        futures = [
+            executor.submit(process_page_batch, pdf_path, chunk, target_codes)
+            for chunk in chunks
+        ]
+
+        all_found = []
+        for future in as_completed(futures):
+            try:
+                found = future.result()
+                all_found.extend(found)
+            except Exception:
+                continue
+
+    all_found = sorted(set(all_found))
+    return pdf_path, all_found
 
 
 def split_pdf_by_code39(pdf_path, barcode_pages, output_dir=None):
     if not barcode_pages:
         return []
-    
+
     pdf_file = Path(pdf_path)
     if output_dir is None:
         output_dir = pdf_file.parent / f"{pdf_file.stem}_split"
     else:
         output_dir = Path(output_dir)
-    
+
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    doc = fitz.open(pdf_path)
+
+    doc = pymupdf.open(pdf_path)
     total_pages = len(doc)
-    
+
     barcode_pages.sort()
-    
+
     created_files = []
     part_number = 1
     start_page = 0
-    
+
     all_separators = barcode_pages + [total_pages]
-    
+
     for separator in all_separators:
         if separator <= start_page:
             continue
-        
-        new_doc = fitz.open()
-        
+
+        new_doc = pymupdf.open()
         for page_num in range(start_page, separator):
             new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
-        
+
         output_filename = output_dir / f"{pdf_file.stem}_part{part_number}.pdf"
         new_doc.save(str(output_filename))
         new_doc.close()
-        
+
         created_files.append(str(output_filename))
-        
+
         part_number += 1
         start_page = separator + 1
-    
+
     doc.close()
     return created_files
 
 
 def process_single_pdf_file(pdf_path, target_codes, output_dir=None):
     pdf_file = Path(pdf_path)
-    
+
     if not pdf_file.exists() or not pdf_file.is_file() or not pdf_path.lower().endswith('.pdf'):
         return []
-    
+
     file_path, barcode_pages = find_code39_pages_parallel(pdf_path, target_codes)
-    
+
     if not barcode_pages:
         return []
-    
+
     created_files = split_pdf_by_code39(file_path, barcode_pages, output_dir)
     return created_files
 
 
 def find_pdf_files(directory):
     directory = Path(directory)
-    
+
     if not directory.exists():
         return []
-    
+
     unique_pdf_files = {}
-    
-    for pdf_file in directory.rglob('*'):
-        if pdf_file.is_file() and pdf_file.suffix.lower() == '.pdf':
+
+    for pdf_file in directory.rglob('*.pdf', case_sensitive=False):
+        if pdf_file.is_file():
             abs_path = str(pdf_file.absolute())
             unique_pdf_files[abs_path] = str(pdf_file)
-    
+
     return list(unique_pdf_files.values())
 
 
 def process_directory(dir_path, target_codes, output_dir=None):
     dir_path_obj = Path(dir_path)
-    
+
     if not dir_path_obj.exists() or not dir_path_obj.is_dir():
         return {}
-    
+
     pdf_files = find_pdf_files(dir_path)
-    
+
     if not pdf_files:
         return {}
-    
+
     results = {}
-    
+
     for i, pdf_file in enumerate(pdf_files, 1):
         try:
             created_files = process_single_pdf_file(pdf_file, target_codes, output_dir)

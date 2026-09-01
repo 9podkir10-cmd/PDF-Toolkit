@@ -1,11 +1,9 @@
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict
 import os
-import shutil
 import hashlib
 from datetime import datetime
-import re
-import json
+from backend.manifest_center import ManifestCenter
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing
@@ -14,7 +12,8 @@ class DirectoryNormalizer:
     def __init__(self, source_dir: str):
         self.source_dir = Path(source_dir)
         self.output_dir = self.source_dir.parent / f"{self.source_dir.name}_hardlink"
-        self.manifest_path = self.output_dir / "manifest.json"
+        self.manifest_center = ManifestCenter.for_folder(self.output_dir)
+        self.manifest_path = self.manifest_center.path
 
         self.pdf_files = self._discover_all_pdfs()
         if not self.pdf_files:
@@ -35,9 +34,9 @@ class DirectoryNormalizer:
                     for chunk in iter(lambda: f.read(65536), b""):
                         hash_sha256.update(chunk)
             return hash_sha256.hexdigest()
-        except Exception:
-            return ""
-    
+        except OSError as exc:
+            raise RuntimeError(f"Не удалось прочитать файл для хеширования: {file_path}") from exc
+
     def _compare_byte_by_byte(self, file1_path: Path, file2_path: Path) -> bool:
         try:
             with open(file1_path, 'rb') as f1, open(file2_path, 'rb') as f2:
@@ -53,22 +52,32 @@ class DirectoryNormalizer:
         except Exception:
             return False
     
-    def _create_hardlink(self, source_path: Path, target_path: Path):
-        if target_path.exists():
-            counter = 1
-            while True:
-                new_target = target_path.parent / f"{target_path.stem}_{counter}{target_path.suffix}"
-                if not new_target.exists():
-                    target_path = new_target
-                    break
+    def _create_hardlink(self, source_path: Path, target_path: Path) -> Path:
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        candidate = target_path
+        counter = 0
+        
+        while True:
+            try:
+                os.link(source_path, candidate)
+                return candidate
+            except FileExistsError:
+                try:
+                    if os.path.samefile(source_path, candidate):
+                        return candidate
+                except OSError:
+                    pass
+                
                 counter += 1
-        os.link(source_path, target_path)
-        return target_path
-    
+                candidate = (
+                    target_path.parent
+                    / f"{target_path.stem}_{counter}{target_path.suffix}"
+                )
+
     def _discover_all_pdfs(self) -> List[Dict]:
         pdf_files = []
-        for pdf_path in self.source_dir.rglob("*.pdf"):
-            if pdf_path.suffix.lower() == '.pdf' and pdf_path.is_file():
+        for pdf_path in self.source_dir.rglob("*.pdf", case_sensitive=False):
+            if pdf_path.is_file():
                 try:
                     if self.output_dir in pdf_path.parents:
                         continue
@@ -81,6 +90,7 @@ class DirectoryNormalizer:
                     })
                 except Exception:
                     continue
+        pdf_files.sort(key=lambda x: x["path"].as_posix().casefold())
         return pdf_files
     
     def _generate_filename(self, file_info: dict, stage: int, hash_value: str = None) -> str:
@@ -150,11 +160,21 @@ class DirectoryNormalizer:
             }
             for future in as_completed(future_to_info):
                 size_key, file_info = future_to_info[future]
-                partial_hash = future.result()
-                if partial_hash:
-                    group_key = f"{size_key}_{partial_hash}"
-                    partial_hash_groups[group_key].append(file_info)      
-        return partial_hash_groups
+                try:
+                    partial_hash = future.result()
+                except Exception as exc:
+                    manifest["stats"]["errors"] += 1
+                    manifest["errors"].append({
+                        "path": str(file_info["path"]),
+                        "stage": 2,
+                        "error": str(exc),
+                    })
+                    continue
+                group_key = f"{size_key}_{partial_hash}"
+                partial_hash_groups[group_key].append(file_info)               
+        for group in partial_hash_groups.values():
+            group.sort(key=lambda info: info["path"].as_posix().casefold())        
+        return partial_hash_groups           
 
     def _stage3_full_hash(self, partial_hash_groups: Dict, manifest: Dict) -> Dict:
         full_hash_groups = defaultdict(list)
@@ -174,7 +194,7 @@ class DirectoryNormalizer:
         
         if not files_to_hash:
             return full_hash_groups
-        
+               
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             future_to_info = {
                 executor.submit(self._calculate_file_hash, info['path']): info
@@ -182,11 +202,22 @@ class DirectoryNormalizer:
             }
             for future in as_completed(future_to_info):
                 file_info = future_to_info[future]
-                full_hash = future.result()
-                if full_hash:
-                    full_hash_groups[full_hash].append(file_info)
+                try:
+                    full_hash = future.result()
+                except Exception as exc:
+                    manifest["stats"]["errors"] += 1
+                    manifest["errors"].append({
+                        "path": str(file_info["path"]),
+                        "stage": 3,
+                        "error": str(exc),
+                    })
+                    continue
+                full_hash_groups[full_hash].append(file_info)
+                
+        for group in full_hash_groups.values():
+            group.sort(key=lambda info: info["path"].as_posix().casefold())        
         return full_hash_groups
-
+    
     def _stage4_byte_by_byte(self, full_hash_groups: Dict, manifest: Dict) -> None:
         for full_hash, files in full_hash_groups.items():
             if len(files) == 1:
@@ -246,8 +277,7 @@ class DirectoryNormalizer:
 
     def normalize_structure(self) -> Dict:
         if self.output_dir.exists() and self.manifest_path.exists():
-            with open(self.manifest_path, 'r', encoding='utf-8') as f:
-                manifest = json.load(f)
+            manifest = self.manifest_center.load()
             return {
                 'unique': manifest.get('unique', {}),
                 'duplicates': manifest.get('duplicates', {}),
@@ -274,7 +304,8 @@ class DirectoryNormalizer:
                 'errors': 0
             },
             'duplicates': {},
-            'unique': {}
+            'unique': {},
+            'errors': []
         }
         
         size_groups = self._stage1_group_by_size()
@@ -282,8 +313,7 @@ class DirectoryNormalizer:
         full_hash_groups = self._stage3_full_hash(partial_hash_groups, manifest)
         self._stage4_byte_by_byte(full_hash_groups, manifest)
         
-        self._save_manifest(manifest)
-        
+        self.manifest_center.save(manifest)
         return {
             'unique': manifest['unique'],
             'duplicates': manifest['duplicates'],
@@ -297,7 +327,3 @@ class DirectoryNormalizer:
                 'duplicate_files': manifest['stats']['duplicates']
             }
         }
-
-    def _save_manifest(self, manifest: Dict):
-        with open(self.manifest_path, 'w', encoding='utf-8') as f:
-            json.dump(manifest, f, ensure_ascii=False, indent=2)

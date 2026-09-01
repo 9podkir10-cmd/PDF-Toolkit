@@ -1,8 +1,8 @@
 import json
 import re
-import shutil
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
+from backend.manifest_center import ManifestCenter
 
 def find_manifest(pdf_path: Path) -> Optional[Path]:
     current_dir = pdf_path.parent
@@ -74,12 +74,13 @@ def update_manifest_after_structure(manifest_path: Path, file_key: str, new_path
         json.dump(manifest, f, ensure_ascii=False, indent=2)
     return True
 
-def load_manifest(folder: Path) -> Dict[str, Any]:
-    manifest_path = folder / "manifest.json"
-    if not manifest_path.exists():
-        return {}
-    with open(manifest_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+def load_manifest(path):
+    path = Path(path)
+
+    if path.is_dir():
+        return ManifestCenter.for_folder(path).load()
+
+    return ManifestCenter(path).load()
 
 def is_ocr_recognized(manifest: Dict[str, Any], filename: str) -> bool:
 

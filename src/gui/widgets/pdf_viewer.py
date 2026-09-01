@@ -1,11 +1,11 @@
 from PySide6.QtCore import Qt, QRectF, Signal
-from PySide6.QtGui import QPixmap, QPainter, QPen, QColor
+from PySide6.QtGui import QPixmap, QPainter, QPen, QColor, QAction, QKeySequence
 from PySide6.QtWidgets import (
     QWidget, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
     QGraphicsRectItem, QVBoxLayout, QHBoxLayout, QPushButton, QButtonGroup
 )
-import fitz
-from backend.services.box_to_img import Region  # <-- импорт
+import pymupdf
+from backend.services.box_to_img import Region
 
 class PDFGraphicsView(QGraphicsView):
     rect_selected = Signal(Region)
@@ -49,7 +49,7 @@ class PDFGraphicsView(QGraphicsView):
             self.current_page_num = page_num
             if self.doc:
                 self.doc.close()
-            self.doc = fitz.open(pdf_path)
+            self.doc = pymupdf.open(pdf_path)
             page = self.doc[page_num]
             pix = page.get_pixmap(dpi=self.dpi)
             img_data = pix.tobytes("ppm")
@@ -204,10 +204,17 @@ class PDFViewer(QWidget):
 
         # Тулбар
         self.toolbar = QHBoxLayout()
-        self.toolbar.addStretch()
+        self.btn_back = QPushButton("Назад")
+        self.btn_back.setToolTip("Ctrl+Left")
+        self.btn_forward = QPushButton("Вперёд")
+        self.btn_forward.setToolTip("Ctrl+Right")
+
         self.btn_hand = QPushButton("move")
+        self.btn_hand.setToolTip("H")
         self.btn_select = QPushButton("pick")
+        self.btn_select.setToolTip("V")
         self.btn_lock = QPushButton("Lock")
+        self.btn_lock.setToolTip("Ctrl + L")
         self.btn_lock.setCheckable(True)
         self.btn_hand.setCheckable(True)
         self.btn_select.setCheckable(True)
@@ -222,6 +229,11 @@ class PDFViewer(QWidget):
         self.toolbar.addWidget(self.btn_select)
         self.toolbar.addWidget(self.btn_lock)
 
+        self.toolbar.addStretch()
+
+        self.toolbar.addWidget(self.btn_back)
+        self.toolbar.addWidget(self.btn_forward)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -231,12 +243,53 @@ class PDFViewer(QWidget):
 
         self.view.set_mode("select")
         self.btn_lock.clicked.connect(self._on_lock_clicked)
+        self.btn_back.clicked.connect(self.go_back_file)
+        self.btn_forward.clicked.connect(self.go_forward_file)
+        self.setup_shortcuts()
 
     def _on_mode_changed(self, button_id: int):
         if button_id == 0:
             self.view.set_mode("hand")
         else:
             self.view.set_mode("select")
+
+    def setup_shortcuts(self):
+        context = Qt.ShortcutContext.WindowShortcut
+
+        # H – режим "рука" (перемещение)
+        action_hand = QAction(self)
+        action_hand.setShortcut(QKeySequence("H"))
+        action_hand.setShortcutContext(context)
+        action_hand.triggered.connect(self.btn_hand.click)
+        self.addAction(action_hand)
+
+        # V – режим "выделение"
+        action_select = QAction(self)
+        action_select.setShortcut(QKeySequence("V"))
+        action_select.setShortcutContext(context)
+        action_select.triggered.connect(self.btn_select.click)
+        self.addAction(action_select)
+
+        # Ctrl+L – блокировка (глобально для окна)
+        action_lock = QAction(self)
+        action_lock.setShortcut(QKeySequence("Ctrl+L"))
+        action_lock.setShortcutContext(context)
+        action_lock.triggered.connect(self.btn_lock.click)
+        self.addAction(action_lock)
+        
+        # Ctrl+Left – предыдущий файл
+        action_back = QAction(self)
+        action_back.setShortcut(QKeySequence("Ctrl+Left"))
+        action_back.setShortcutContext(context)
+        action_back.triggered.connect(self.btn_back.click)
+        self.addAction(action_back)    
+        
+        # Ctrl+Right – следующий файл
+        action_forward = QAction(self)
+        action_forward.setShortcut(QKeySequence("Ctrl+Right"))
+        action_forward.setShortcutContext(context)
+        action_forward.triggered.connect(self.btn_forward.click)
+        self.addAction(action_forward)            
 
     def _on_lock_clicked(self):
         checked = self.btn_lock.isChecked()
@@ -252,6 +305,12 @@ class PDFViewer(QWidget):
         else:
             self.btn_select.setChecked(True)
             self.view.set_mode("select")
+            
+    def go_back_file(self):
+        print("Использование1")
+    
+    def go_forward_file(self):
+        print("Использование2")     
 
     # Прокси-методы
     def load_pdf(self, pdf_path: str, page_num: int = 0):

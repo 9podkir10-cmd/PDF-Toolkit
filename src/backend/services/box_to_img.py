@@ -1,4 +1,4 @@
-import fitz
+import pymupdf
 from PIL import Image
 from io import BytesIO
 from dataclasses import dataclass
@@ -19,10 +19,10 @@ class PDFExtractor:
         region: Region,
         dpi: int = 300
     ) -> Image.Image:
-        doc = fitz.open(pdf_path)
+        doc = pymupdf.open(pdf_path)
         try:
             page = doc[region.page - 1]
-            rect = fitz.Rect(
+            rect = pymupdf.Rect(
                 region.x,
                 region.y,
                 region.x + region.w,

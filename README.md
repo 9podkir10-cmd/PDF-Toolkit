@@ -1,4 +1,4 @@
-# PDF-Toolkit v1.0.5
+# PDF-Toolkit v1.0.6
 
 [![Python Version](https://img.shields.io/badge/python-3.9+-blue?style=for-the-badge)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
@@ -15,11 +15,9 @@ PDF-Toolkit — утилита для обработки PDF: извлечени
 3. Запустите `PDF-Toolkit.exe`.
 4. Укажите путь к Tesseract OCR (если используете) через настройки GUI.
 
-## Что нового в версии v1.0.5?
+## Что нового в версии v1.0.6?
 
-- `clear_path.py` ускорен x1.5 - x2.0 раз
 - Исправление ошибок
-- Разделение по штрихкодам подготовлено к переезду на C++
 
 ## Функционал
 

@@ -1,5 +1,5 @@
 from pathlib import Path
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import (
     QWidget, QLabel, QMenu, QPushButton, QLineEdit,
     QVBoxLayout, QHBoxLayout, QMessageBox, QCheckBox,
@@ -12,6 +12,7 @@ from backend.services.ocr_workflow import OCRWorkflow
 from backend.services.template_service import FilenameTemplateService
 from gui.widgets.pdf_viewer import PDFViewer
 from gui.widgets.models import OCRSession
+from gui.workers.ocr_worker import OCRWorker
 from gui.signals import app_signals
 from backend.structure import preview_structure, structure_pdfs 
 from backend.services.box_to_img import PDFExtractor, Region
@@ -25,6 +26,8 @@ class Ocr_fPage(QWidget):
         super().__init__()
         self.session = OCRSession() 
         self._ocr_running = False
+        self._ocr_thread = None
+        self._ocr_worker = None
 
         self.queue_service = PDFQueueService()
         self.template_service = FilenameTemplateService()
@@ -376,6 +379,40 @@ class Ocr_fPage(QWidget):
         if current < self.page_spin.maximum():
             self.page_spin.setValue(current + 1)
 
+    # ---------- от зависаний ----------
+    def _set_ocr_running(self, running):
+        self._ocr_running = running
+        self.ocr_button.setEnabled(not running and bool(self.session.zones))
+        self.apply_btn.setEnabled(not running)
+
+    def _on_ocr_finished(self, results):
+        self._set_ocr_running(False)
+
+        if results is None:
+            return
+
+        self.session.zone_texts = [r.text for r in results]
+        self.session.zone_ids = [r.storage_id for r in results]
+
+        self.result_text.clear()
+        for idx, r in enumerate(results):
+            self.result_text.appendPlainText(f"{{zone{idx}}} {r.text}")
+
+        self.ocr_info.setText(f"Выделено областей: {len(results)}")
+
+    def _on_ocr_error(self, message):
+        self._set_ocr_running(False)
+        QMessageBox.critical(self, "Ошибка OCR", message)
+
+    def _cleanup_ocr_worker(self):
+        if self._ocr_worker is not None:
+            self._ocr_worker.deleteLater()
+            self._ocr_worker = None
+        if self._ocr_thread is not None:
+            self._ocr_thread.deleteLater()
+            self._ocr_thread = None
+
+
     # ---------- Выделение областей ----------
     def _on_rect_selected(self, region: Region):
         self.session.zones.append(region)
@@ -442,44 +479,41 @@ class Ocr_fPage(QWidget):
     def _run_ocr(self):
         if self._ocr_running:
             return
-        self._ocr_running = True
+
+        if not self.session.pdf_path or not self.session.zones:
+            QMessageBox.warning(self, "Ошибка", "Не выбран PDF или не выделена область.")
+            return
+
+        config = load_config()
+        self.ocr_workflow.ensure_storage(
+            enabled=config.get("ocr_storage_enabled", False),
+            storage_path=Path("ocr_storage")
+        )
+
         try:
-            if not self.session.pdf_path or not self.session.zones:
-                QMessageBox.warning(self, "Ошибка", "Не выбран PDF или не выделена область.")
-                return
+            self.ocr_workflow.ocr.reload_from_config()
+        except FileNotFoundError as e:
+            QMessageBox.critical(self, "Ошибка OCR", str(e))
+            return
 
-            config = load_config()
-            self.ocr_workflow.ensure_storage(
-                enabled=config.get("ocr_storage_enabled", False),
-                storage_path=Path("ocr_storage")
-            )
+        self._ocr_thread = QThread(self)
+        self._ocr_worker = OCRWorker(
+            self.ocr_workflow,
+            self.session.pdf_path,
+            self.session.zones,
+            dpi=300
+        )
+        self._ocr_worker.moveToThread(self._ocr_thread)
 
-            try:
-                self.ocr_workflow.ocr.reload_from_config()
-            except FileNotFoundError as e:
-                QMessageBox.critical(self, "Ошибка OCR", str(e))
-                return
+        self._ocr_thread.started.connect(self._ocr_worker.run)
+        self._ocr_worker.finished.connect(self._on_ocr_finished)
+        self._ocr_worker.error.connect(self._on_ocr_error)
+        self._ocr_worker.finished.connect(self._ocr_thread.quit)
+        self._ocr_worker.error.connect(self._ocr_thread.quit)
+        self._ocr_thread.finished.connect(self._cleanup_ocr_worker)
 
-            try:
-                results = self.ocr_workflow.recognize_zones(
-                    pdf_path=self.session.pdf_path,
-                    regions=self.session.zones,
-                    dpi=300
-                )
-            except Exception as e:
-                QMessageBox.critical(self, "Ошибка OCR", str(e))
-                return
-
-            self.session.zone_texts = [r.text for r in results]
-            self.session.zone_ids = [r.storage_id for r in results]
-
-            self.result_text.clear()
-            for idx, r in enumerate(results):
-                self.result_text.appendPlainText(f"{{zone{idx}}} {r.text}")
-
-            self.ocr_info.setText(f"Выделено областей: {len(results)}")
-        finally:
-            self._ocr_running = False
+        self._set_ocr_running(True)
+        self._ocr_thread.start()
         
     def _apply_action(self):
         if not self.session.pdf_path:

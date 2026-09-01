@@ -1,11 +1,10 @@
-import json
+from backend.manifest_center import ManifestCenter
 import re
 import shutil
 from pathlib import Path
 from typing import Dict, List
 
 def sanitize_segment(segment: str) -> str:
-    """Очищает сегмент пути от недопустимых символов."""
     cleaned = re.sub(r'[^a-zA-Zа-яА-ЯёЁ0-9\s\-]', '', segment)
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     return cleaned
@@ -18,17 +17,16 @@ def build_path_from_structure(structure_template: str, zone_texts: List[str]) ->
     path_str = structure_template
     for i, text in enumerate(zone_texts):
         path_str = path_str.replace(f"{{zone{i}}}", text)
-    # Разбиваем по '/' и очищаем каждый сегмент
     segments = [sanitize_segment(s) for s in path_str.split('/') if s.strip()]
     return Path(*segments)
 
 def structure_pdfs(base_dir: Path) -> Dict:
-    manifest_path = base_dir / "manifest.json"
-    if not manifest_path.exists():
+    center = ManifestCenter.for_folder(base_dir)
+
+    if not center.path.exists():
         return {"error": "manifest.json не найден в выбранной папке"}
 
-    with open(manifest_path, 'r', encoding='utf-8') as f:
-        manifest = json.load(f)
+    manifest = center.load()
 
     moved = 0
     errors = 0
@@ -46,11 +44,9 @@ def structure_pdfs(base_dir: Path) -> Dict:
         if entry.get('structured', False):
             continue
 
-        # Используем новое поле used_structure и zone_texts
         structure_template = ocr.get('used_structure')
         zone_texts = ocr.get('zone_texts', [])
         if not structure_template or not zone_texts:
-            # Нет шаблона структуры или текстов — пропускаем
             continue
 
         try:
@@ -61,7 +57,6 @@ def structure_pdfs(base_dir: Path) -> Dict:
             continue
 
         if not rel_path.parts:
-            # Пустой путь — некуда перемещать
             details.append(f"Пустой путь для {key}, пропускаем")
             continue
 
@@ -91,9 +86,8 @@ def structure_pdfs(base_dir: Path) -> Dict:
             errors += 1
             details.append(f"Ошибка перемещения {source_file.name}: {str(e)}")
 
-    with open(manifest_path, 'w', encoding='utf-8') as f:
-        json.dump(manifest, f, ensure_ascii=False, indent=2)
-
+    center.save(manifest)
+    
     return {
         "moved": moved,
         "errors": errors,
@@ -101,12 +95,7 @@ def structure_pdfs(base_dir: Path) -> Dict:
     }
 
 def preview_structure(base_dir: Path) -> str:
-    manifest_path = base_dir / "manifest.json"
-    if not manifest_path.exists():
-        return "manifest.json не найден"
-
-    with open(manifest_path, 'r', encoding='utf-8') as f:
-        manifest = json.load(f)
+    manifest = ManifestCenter.for_folder(base_dir).load()  
 
     paths = []
     for section in ('unique', 'duplicates'):
@@ -130,7 +119,6 @@ def preview_structure(base_dir: Path) -> str:
     if not paths:
         return "Нет файлов для структуризации (все уже обработаны или нет шаблона структуры)."
 
-    # Построение дерева каталогов
     tree = {}
     for path in paths:
         parts = path.split('/')

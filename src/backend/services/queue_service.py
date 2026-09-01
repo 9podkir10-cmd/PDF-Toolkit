@@ -1,10 +1,6 @@
-# backend/services/queue_service.py
 from pathlib import Path
-import json
 from typing import List
-
-from backend.manifest import load_manifest, is_ocr_recognized
-
+from backend.manifest_center import ManifestCenter
 
 class PDFQueueService:
     @staticmethod
@@ -16,13 +12,10 @@ class PDFQueueService:
           - duplicates, где original_path уже обработан
         """
         base = Path(folder)
-        manifest_path = base / "manifest.json"
+        manifest = ManifestCenter.for_folder(base).load()
         skip_original_paths = set()
 
-        if manifest_path.exists():
-            with open(manifest_path, 'r', encoding='utf-8') as f:
-                manifest = json.load(f)
-
+        if manifest:
             duplicates = manifest.get('duplicates', {})
             if isinstance(duplicates, dict):
                 for entry in duplicates.values():
@@ -42,7 +35,7 @@ class PDFQueueService:
                         if orig:
                             skip_original_paths.add(str(Path(orig).resolve()))
 
-        all_pdfs = list(base.rglob("*.pdf"))
+        all_pdfs = list(base.rglob("*.pdf", case_sensitive=False))
         pending = []
 
         for p in all_pdfs:

@@ -68,22 +68,6 @@ def save_main_settings(ocr_path: str, language: str, ocr_storage_enabled: bool) 
         "ocr_storage_enabled": ocr_storage_enabled
     })
 
-def get_templates() -> list[dict]:
-    config = load_config()
-    templates = config.get("templates", [])
-    if templates and isinstance(templates[0], str):
-        new_templates = []
-        for i, pattern in enumerate(templates):
-            new_templates.append({
-                "name": pattern,
-                "pattern": pattern,
-                "structure": None
-            })
-        templates = new_templates
-        config["templates"] = templates
-        save_config(config)
-    return templates
-
 def save_templates(templates: list[dict]) -> bool:
     config = load_config()
     config["templates"] = templates

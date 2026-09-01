@@ -17,19 +17,9 @@ def parse_arguments():
     args, unknown = parser.parse_known_args()
     return args, unknown
 
-
-def show_version():
-    version = "1.0.5"
-    print(f"PDF-Toolkit v{version}")
-
-
 def main():
     args, cli_args = parse_arguments()
-    
-    if args.version:
-        show_version()
-        sys.exit(0)
-    
+   
     if args.cli:
         try:
             from cli import main as cli_main
