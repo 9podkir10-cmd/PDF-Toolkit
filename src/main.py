@@ -1,7 +1,6 @@
 import sys
 import argparse
 import multiprocessing
-from pathlib import Path
 
 
 def parse_arguments():
@@ -12,7 +11,6 @@ def parse_arguments():
     
     parser.add_argument("--gui", action="store_true", help="Запустить графический интерфейс")
     parser.add_argument("--cli", action="store_true", help="Запустить командную строку")
-    parser.add_argument("--version", action="store_true", help="Показать версию")
     
     args, unknown = parser.parse_known_args()
     return args, unknown

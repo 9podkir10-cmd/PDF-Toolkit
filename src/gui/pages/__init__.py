@@ -3,7 +3,6 @@ from .export import ExportPage
 from .index import Ocr_fPage
 from .split import SplitPage
 from .scan import ScanPage
-from .forms import FormsPage
 from .settings import SettingsPage
 
 __all__ = [
@@ -12,6 +11,5 @@ __all__ = [
     "IndexPage",
     "SplitPage",
     "ScanPage",
-    "FormsPage",
     "SettingsPage"
 ]

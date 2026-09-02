@@ -1,59 +1,29 @@
 from pathlib import Path
 from typing import List
-from backend.manifest_center import ManifestCenter
+from backend.manifest import get_manifest_service
 
 class PDFQueueService:
     @staticmethod
-    def get_pending(folder: Path) -> List[Path]:
+    def get_pending(folder: Path) -> List[str]:
         """
-        Возвращает список PDF в папке, которые ещё не распознаны.
+        Возвращает список record_id файлов, которые ещё не распознаны.
         Учитывает:
-          - unique с is_recognized=True
-          - duplicates, где original_path уже обработан
+          - уникальные файлы (is_duplicate=False) с is_recognized=False
+          - дубликаты пропускаются (is_duplicate=True)
         """
         base = Path(folder)
-        manifest = ManifestCenter.for_folder(base).load()
-        skip_original_paths = set()
+        manifest_path = base / "manifest.json"
+        service = get_manifest_service(str(manifest_path))
+        manifest = service.load()
+        if manifest is None:
+            return []
 
-        if manifest:
-            duplicates = manifest.get('duplicates', {})
-            if isinstance(duplicates, dict):
-                for entry in duplicates.values():
-                    if isinstance(entry, dict):
-                        orig = entry.get('original_path')
-                        if orig:
-                            skip_original_paths.add(str(Path(orig).resolve()))
-
-            unique = manifest.get('unique', {})
-            if isinstance(unique, dict):
-                for entry in unique.values():
-                    if not isinstance(entry, dict):
-                        continue
-                    ocr = entry.get('ocr')
-                    if isinstance(ocr, dict) and ocr.get('is_recognized', False):
-                        orig = entry.get('original_path')
-                        if orig:
-                            skip_original_paths.add(str(Path(orig).resolve()))
-
-        all_pdfs = list(base.rglob("*.pdf", case_sensitive=False))
-        pending = []
-
-        for p in all_pdfs:
-            p_resolved = p.resolve()
-            should_skip = False
-
-            for skip_orig_str in skip_original_paths:
-                try:
-                    skip_path = Path(skip_orig_str).resolve()
-                    if p_resolved.samefile(skip_path):
-                        should_skip = True
-                        break
-                except (FileNotFoundError, OSError):
-                    if str(p_resolved) == skip_orig_str:
-                        should_skip = True
-                        break
-
-            if not should_skip:
-                pending.append(p_resolved)
-
-        return pending
+        pending_ids = []
+        for record_id, record in manifest.records.items():
+            if record.deduplication.is_duplicate:
+                continue
+            if not record.ocr.is_recognized:
+                file_path = base / record.filename
+                if file_path.exists():
+                    pending_ids.append(record_id)
+        return pending_ids

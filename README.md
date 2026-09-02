@@ -1,6 +1,6 @@
-# PDF-Toolkit v1.0.6
+# PDF-Toolkit
 
-[![Python Version](https://img.shields.io/badge/python-3.9+-blue?style=for-the-badge)](https://www.python.org/)
+[![Python Version](https://img.shields.io/badge/python-3.13.14-blue?style=for-the-badge)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
 
 PDF-Toolkit — утилита для обработки PDF: извлечение страниц, экспорт метаданных, нормализация структуры папок, разделение по штрих-кодам и распознавание текста (OCR). 
@@ -15,9 +15,9 @@ PDF-Toolkit — утилита для обработки PDF: извлечени
 3. Запустите `PDF-Toolkit.exe`.
 4. Укажите путь к Tesseract OCR (если используете) через настройки GUI.
 
-## Что нового в версии v1.0.6?
+## Что нового в версии v1.0.7?
 
-- Исправление ошибок
+- Централизована логика работы с `manifest.json`
 
 ## Функционал
 
@@ -169,7 +169,8 @@ python main.py --gui
 ## Планируемые изменения
 
 - Поддержка альтернативных движков OCR.
-- Перенос некоторого функционала на C++
+- Перенос части функционала на C++
+- Централизовать логику работы с конфигом
 
 ## Лицензия
 

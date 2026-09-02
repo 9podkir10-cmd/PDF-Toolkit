@@ -196,7 +196,9 @@ class PDFGraphicsView(QGraphicsView):
 
 class PDFViewer(QWidget):
     rect_selected = Signal(Region)
-    lock_toggled = Signal(bool)     
+    lock_toggled = Signal(bool) 
+    forward_requested = Signal()
+    backward_requested = Signal()      
     def __init__(self, parent=None):
         super().__init__(parent)
         self.view = PDFGraphicsView(self)
@@ -243,9 +245,10 @@ class PDFViewer(QWidget):
 
         self.view.set_mode("select")
         self.btn_lock.clicked.connect(self._on_lock_clicked)
-        self.btn_back.clicked.connect(self.go_back_file)
-        self.btn_forward.clicked.connect(self.go_forward_file)
         self.setup_shortcuts()
+        
+        self.btn_back.clicked.connect(self._on_backward_clicked)
+        self.btn_forward.clicked.connect(self._on_forward_clicked)
 
     def _on_mode_changed(self, button_id: int):
         if button_id == 0:
@@ -306,11 +309,11 @@ class PDFViewer(QWidget):
             self.btn_select.setChecked(True)
             self.view.set_mode("select")
             
-    def go_back_file(self):
-        print("Использование1")
-    
-    def go_forward_file(self):
-        print("Использование2")     
+    def _on_backward_clicked(self):
+        self.backward_requested.emit()
+
+    def _on_forward_clicked(self):
+        self.forward_requested.emit()  
 
     # Прокси-методы
     def load_pdf(self, pdf_path: str, page_num: int = 0):

@@ -1,7 +1,6 @@
 import os
 import shutil
 import tempfile
-from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import Qt, Signal, QObject, QThread

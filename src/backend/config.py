@@ -73,12 +73,6 @@ def save_templates(templates: list[dict]) -> bool:
     config["templates"] = templates
     return save_config(config)
 
-def get_template_structure(index: int) -> str | None:
-    templates = get_templates()
-    if 0 <= index < len(templates):
-        return templates[index].get("structure")
-    return None
-
 def set_selected_template_index(index: int) -> bool:
     return save_config({"selected_template_index": index})
 

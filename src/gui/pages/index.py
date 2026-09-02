@@ -6,6 +6,8 @@ from PySide6.QtWidgets import (
     QFileDialog, QSpinBox, QPlainTextEdit, QComboBox,
 )
 
+from backend.manifest import get_manifest_service
+from backend.manifest.utils import find_manifest
 from backend.services.queue_service import PDFQueueService
 from backend.services.file_workflow import PDFFileWorkflow
 from backend.services.ocr_workflow import OCRWorkflow
@@ -71,6 +73,8 @@ class Ocr_fPage(QWidget):
         self.viewer.rect_selected.connect(self._on_rect_selected)
         left_panel.addWidget(self.viewer)
         content_layout.addLayout(left_panel, 3)
+        self.viewer.forward_requested.connect(self._go_forward)
+        self.viewer.backward_requested.connect(self._go_backward)
 
         # Правая панель
         right_panel = QVBoxLayout()
@@ -196,17 +200,44 @@ class Ocr_fPage(QWidget):
         if not normalized_path.exists():
             normalized_path = orig_path
 
-        self.session.input_mode = "folder"
-        self.session.queue = [str(p) for p in self.queue_service.get_pending(normalized_path)]
-        if not self.session.queue:
-            QMessageBox.information(self, "Информация", "Все PDF уже распознаны.")
+        manifest_path = normalized_path / "manifest.json"
+        if not manifest_path.exists():
+            QMessageBox.critical(self, "Ошибка", f"Манифест не найден: {manifest_path}")
             return
 
+        self.session.input_mode = "folder"
+        self.session.manifest_path = str(manifest_path)
+
+        pending_ids = self.queue_service.get_pending(normalized_path)
+        if not pending_ids:
+            QMessageBox.information(self, "Информация", "Нет файлов для распознавания (возможно, все уже обработаны).")
+            return
+
+        self.session.queue_ids = pending_ids
         self.session.current_index = 0
+        first_id = pending_ids[0]
+        self.session.record_id = first_id
+
+        service = get_manifest_service(self.session.manifest_path)
+        manifest = service.load()
+        if manifest is None:
+            QMessageBox.critical(self, "Ошибка", "Не удалось загрузить манифест")
+            return
+        
+        record = service.get_record(first_id)
+        if record is None:
+            QMessageBox.critical(self, "Ошибка", f"Запись с ID {first_id} не найдена.")
+            return
+
+        pdf_path = normalized_path / record.filename
+        if not pdf_path.exists():
+            QMessageBox.critical(self, "Ошибка", f"Файл не найден: {pdf_path}")
+            return
+
         self.input_edit.blockSignals(True)
         self.input_edit.setText(str(normalized_path))
         self.input_edit.blockSignals(False)
-        self._load_pdf(self.session.queue[0])
+        self._load_pdf(str(pdf_path))
                 
     def _finish_folder_processing(self):
         from PySide6.QtWidgets import QDialog, QPushButton, QVBoxLayout, QPlainTextEdit, QHBoxLayout
@@ -250,7 +281,8 @@ class Ocr_fPage(QWidget):
 
         if result == QDialog.Accepted:
             try:
-                res = structure_pdfs(Path(folder_path))
+                pending_ids = self.session.queue_ids
+                res = structure_pdfs(Path(folder_path), pending_ids)
                 if "error" in res:
                     QMessageBox.critical(self, "Ошибка структуризации", res["error"])
                 else:
@@ -339,21 +371,52 @@ class Ocr_fPage(QWidget):
 
         if p.is_file():
             self.session.input_mode = "file"
-            self.session.queue = []
+            self.session.queue_ids = []
             self.session.current_index = -1
+            self.session.record_id = None
+            self.session.manifest_path = None
             self._load_pdf(str(p))
             return
 
         if p.is_dir():
+            manifest_path = p / "manifest.json"
+            if not manifest_path.exists():
+                self.result_text.setPlainText("Манифест не найден.")
+                return
+
             self.session.input_mode = "folder"
-            self.session.queue = [str(p) for p in self.queue_service.get_pending(p)]
-            if self.session.queue:
-                self.session.current_index = 0
-                self._load_pdf(self.session.queue[0])
-            else:
+            self.session.manifest_path = str(manifest_path)
+
+            pending_ids = self.queue_service.get_pending(p)
+            if not pending_ids:
                 self.result_text.setPlainText("Все PDF уже распознаны.")
-                self.session.queue = []
+                self.session.queue_ids = []
                 self.session.current_index = -1
+                self.session.record_id = None
+                return
+
+            service = get_manifest_service(self.session.manifest_path)
+            manifest = service.load()
+            if manifest is None:
+                self.result_text.setPlainText("Ошибка загрузки манифеста.")
+                return
+
+            first_id = pending_ids[0]
+            record = service.get_record(first_id)
+            if record is None:
+                self.result_text.setPlainText(f"Запись с ID {first_id} не найдена.")
+                return
+
+            pdf_path = p / record.filename
+            if not pdf_path.exists():
+                self.result_text.setPlainText(f"Файл не найден: {pdf_path}")
+                return
+
+            self.session.queue_ids = pending_ids
+            self.session.current_index = 0
+            self.session.record_id = first_id
+
+            self._load_pdf(str(pdf_path))
 
     def _change_page(self, page_num: int):
         if hasattr(self, '_changing_page') and self._changing_page:
@@ -378,6 +441,64 @@ class Ocr_fPage(QWidget):
         current = self.page_spin.value()
         if current < self.page_spin.maximum():
             self.page_spin.setValue(current + 1)
+
+    def _go_forward(self):
+        if self.session.input_mode != "folder":
+            return
+        if not self.session.queue_ids:
+            return
+        if self.session.current_index + 1 >= len(self.session.queue_ids):
+            return
+
+        self.session.current_index += 1
+        next_id = self.session.queue_ids[self.session.current_index]
+        self.session.record_id = next_id
+
+        service = get_manifest_service(self.session.manifest_path)
+        manifest = service.load()
+        if manifest is None:
+            QMessageBox.critical(self, "Ошибка", "Не удалось загрузить манифест")
+            return
+        record = service.get_record(next_id)
+        if record is None:
+            QMessageBox.critical(self, "Ошибка", f"Запись с ID {next_id} не найдена.")
+            return
+
+        pdf_path = Path(self.session.manifest_path).parent / record.filename
+        if not pdf_path.exists():
+            QMessageBox.critical(self, "Ошибка", f"Файл не найден: {pdf_path}")
+            return
+
+        self._load_pdf(str(pdf_path))
+
+    def _go_backward(self):
+        if self.session.input_mode != "folder":
+            return
+        if not self.session.queue_ids:
+            return
+        if self.session.current_index - 1 < 0:
+            return
+
+        self.session.current_index -= 1
+        prev_id = self.session.queue_ids[self.session.current_index]
+        self.session.record_id = prev_id
+
+        service = get_manifest_service(self.session.manifest_path)
+        manifest = service.load()
+        if manifest is None:
+            QMessageBox.critical(self, "Ошибка", "Не удалось загрузить манифест")
+            return
+        record = service.get_record(prev_id)
+        if record is None:
+            QMessageBox.critical(self, "Ошибка", f"Запись с ID {prev_id} не найдена.")
+            return
+
+        pdf_path = Path(self.session.manifest_path).parent / record.filename
+        if not pdf_path.exists():
+            QMessageBox.critical(self, "Ошибка", f"Файл не найден: {pdf_path}")
+            return
+
+        self._load_pdf(str(pdf_path))
 
     # ---------- от зависаний ----------
     def _set_ocr_running(self, running):
@@ -562,7 +683,15 @@ class Ocr_fPage(QWidget):
             else:
                 set_selected_template_index(-1)
 
-        # --- 3. Переименование и обновление manifest через сервис ---
+        # --- 3. Проверяем наличие record_id ---
+        record_id = self.session.record_id
+        manifest_path = self.session.manifest_path if self.session.input_mode == "folder" else find_manifest(old_file)
+
+        if not manifest_path or not record_id:
+            QMessageBox.warning(self, "Ошибка", "Не найден ID записи в манифесте")
+            return
+
+        # --- 4. Переименование ---
         try:
             new_file = self.file_workflow.apply_rename(
                 pdf_path=old_file,
@@ -571,14 +700,6 @@ class Ocr_fPage(QWidget):
                 manual_name=self.filename_edit.text().strip()
             )
             self.session.pdf_path = str(new_file)
-
-            self.file_workflow.update_manifest(
-                old_path=old_file,
-                new_path=new_file,
-                template_pattern=pattern,
-                zone_texts=self.session.zone_texts,
-                structure_pattern=structure_pattern   # новое
-            )
         except ValueError as e:
             QMessageBox.warning(self, "Ошибка", str(e))
             return
@@ -586,15 +707,37 @@ class Ocr_fPage(QWidget):
             QMessageBox.critical(self, "Ошибка", f"Не удалось переименовать файл:\n{e}")
             return
 
-        # --- 4. Переход к следующему PDF (если папка) ---
+        # --- 5. Обновление манифеста по ID ---
+        try:
+            self.file_workflow.update_manifest_by_record_id(
+                record_id=record_id,
+                manifest_path=Path(manifest_path),
+                template_pattern=pattern,
+                zone_texts=self.session.zone_texts,
+                structure_pattern=structure_pattern,
+                new_path=new_file,
+            )
+        except Exception as e:
+            QMessageBox.warning(self, "Ошибка обновления манифеста", str(e))
+
+        # --- 6. Переход к следующему PDF в папке ---
         if self.session.input_mode == "folder":
             self.session.current_index += 1
-            if self.session.current_index < len(self.session.queue):
-                next_pdf = self.session.queue[self.session.current_index]
-                self._load_pdf(next_pdf)
+            if self.session.current_index < len(self.session.queue_ids):
+                next_id = self.session.queue_ids[self.session.current_index]
+                self.session.record_id = next_id
+                service = get_manifest_service(self.session.manifest_path)
+                manifest = service.load()  # <-- загружаем
+                if manifest is None:
+                    QMessageBox.critical(self, "Ошибка", "Не удалось загрузить манифест")
+                    return
+                record = service.get_record(next_id)
+                if record:
+                    next_pdf_path = Path(self.session.manifest_path).parent / record.filename
+                    self._load_pdf(str(next_pdf_path))
             else:
                 self._finish_folder_processing()
-
+                
     def _reset_state(self):
         # Создаём новую сессию
         self.session = OCRSession()
