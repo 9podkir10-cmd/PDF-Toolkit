@@ -1,19 +1,14 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
-from PIL import Image
-
 from backend.services.box_to_img import PDFExtractor, Region
 from backend.services.ocr_b import OCRBackend
 from backend.services.storage import Storage
 
-
 @dataclass
 class OCRZoneResult:
-    """Результат OCR для одной зоны."""
     text: str
     storage_id: Optional[str] = None
-
 
 class OCRWorkflow:
     def __init__(

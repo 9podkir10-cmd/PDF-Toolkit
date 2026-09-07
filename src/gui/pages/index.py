@@ -1,11 +1,9 @@
 from pathlib import Path
+from PySide6.QtGui import QShortcut, QKeySequence
 from PySide6.QtCore import Qt, QThread
-from PySide6.QtWidgets import (
-    QWidget, QLabel, QMenu, QPushButton, QLineEdit,
+from PySide6.QtWidgets import (QWidget, QLabel, QMenu, QPushButton, QLineEdit,
     QVBoxLayout, QHBoxLayout, QMessageBox, QCheckBox,
-    QFileDialog, QSpinBox, QPlainTextEdit, QComboBox,
-)
-
+    QFileDialog, QSpinBox, QPlainTextEdit, QComboBox)
 from backend.manifest import get_manifest_service
 from backend.manifest.utils import find_manifest
 from backend.services.queue_service import PDFQueueService
@@ -20,8 +18,7 @@ from backend.structure import preview_structure, structure_pdfs
 from backend.services.box_to_img import PDFExtractor, Region
 from backend.services.ocr_b import OCRBackend
 from backend.clear_path import DirectoryNormalizer
-from backend.config import load_config, get_templates, get_selected_template_index, set_selected_template_index
-
+from backend.config import get_config_service
 
 class Ocr_fPage(QWidget):
     def __init__(self):
@@ -35,9 +32,10 @@ class Ocr_fPage(QWidget):
         self.template_service = FilenameTemplateService()
         self.file_workflow = PDFFileWorkflow(self.template_service)
 
-        config = load_config()
-        tesseract_path = config.get("ocr_path", None)
-        language = config.get("language", "rus+eng")
+        self.config_service = get_config_service()
+        config = self.config_service.get_config()
+        tesseract_path = config.ocr_path
+        language = config.language
 
         ocr_backend = OCRBackend(tesseract_path, language)
 
@@ -57,10 +55,6 @@ class Ocr_fPage(QWidget):
         main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         main_layout.setContentsMargins(30, 30, 30, 30)
         main_layout.setSpacing(20)
-
-        title = QLabel("OCR")
-        title.setStyleSheet("font-size: 24px; font-weight: bold;")
-        main_layout.addWidget(title)
 
         # Основной контент
         content_layout = QHBoxLayout()
@@ -108,6 +102,7 @@ class Ocr_fPage(QWidget):
         right_panel.addLayout(ocr_row)
 
         self.clear_button = QPushButton("Отменить выделение")
+        self.clear_button.setToolTip("Esc")
         self.clear_button.setMinimumHeight(40)
         right_panel.addWidget(self.clear_button)
         right_panel.addSpacing(20)
@@ -158,6 +153,7 @@ class Ocr_fPage(QWidget):
 
         # ---- Apply button ----
         self.apply_btn = QPushButton("Apply")
+        self.apply_btn.setToolTip("Enter")
         self.apply_btn.setMinimumHeight(42)
         right_panel.addWidget(self.apply_btn)
 
@@ -174,12 +170,16 @@ class Ocr_fPage(QWidget):
         self.viewer.lock_toggled.connect(self._on_lock_toggled)     
         self.page_spin.valueChanged.connect(self._change_page)
         self.apply_btn.clicked.connect(self._apply_action)
+        self.apply_shortcut = QShortcut(QKeySequence("Return"), self)
+        self.apply_shortcut.activated.connect(self.apply_btn.click)
+        self.apply_shortcut_numpad = QShortcut(QKeySequence("Enter"), self)
+        self.apply_shortcut_numpad.activated.connect(self.apply_btn.click)
+        self.clear_shortcut = QShortcut(QKeySequence("Esc"), self)
+        self.clear_shortcut.activated.connect(self.clear_button.click)
 
     # ---------- Навигация и загрузка ----------
     def _browse_file(self):
-        filename, _ = QFileDialog.getOpenFileName(
-            self, "Select PDF File", "", "PDF Files (*.pdf)"
-        )
+        filename, _ = QFileDialog.getOpenFileName(self, "Select PDF File", "", "PDF Files (*.pdf)")
         if filename:
             self.input_edit.setText(filename)
 
@@ -303,12 +303,12 @@ class Ocr_fPage(QWidget):
         self.template_combo.blockSignals(True)
         self.template_combo.clear()
         self.template_combo.addItem("Не использовать", -1)
-        templates = get_templates()
+        self.config_service.reload()  
+        templates = self.config_service.get_templates()
         for idx, tpl in enumerate(templates):
-            # Показываем name, если есть, иначе pattern
-            display = tpl.get("name", tpl.get("pattern", f"Шаблон {idx+1}"))
+            display = tpl.name or tpl.pattern
             self.template_combo.addItem(display, idx)
-        selected_idx = get_selected_template_index()
+        selected_idx = self.config_service.get_selected_template_index()
         found = -1
         for i in range(self.template_combo.count()):
             if self.template_combo.itemData(i) == selected_idx:
@@ -318,7 +318,7 @@ class Ocr_fPage(QWidget):
         self.template_combo.blockSignals(False)
 
     def _on_template_changed(self, index):
-        set_selected_template_index(self.template_combo.currentData())                
+        self.config_service.set_selected_template_index(self.template_combo.currentData())
 
     def _load_pdf(self, pdf_path):
         if not pdf_path:
@@ -344,6 +344,17 @@ class Ocr_fPage(QWidget):
         self.ocr_button.setEnabled(False)
         self._update_view_rects()
         self.result_text.setPlainText(f"PDF загружен:\n{pdf_path}")
+
+        if self.session.input_mode == "folder" and self.session.queue_ids:
+            current = self.session.current_index + 1
+            total = len(self.session.queue_ids)
+            self.viewer.update_counter(current, total)
+            self.viewer.btn_back.setEnabled(self.session.current_index > 0)
+            self.viewer.btn_forward.setEnabled(self.session.current_index < total - 1)
+        else:
+            self.viewer.update_counter(0, 0)
+            self.viewer.btn_back.setEnabled(False)
+            self.viewer.btn_forward.setEnabled(False)
 
         if self.session.locked and self.session.locked_rects:
             self.session.zones.clear()
@@ -373,8 +384,33 @@ class Ocr_fPage(QWidget):
             self.session.input_mode = "file"
             self.session.queue_ids = []
             self.session.current_index = -1
-            self.session.record_id = None
-            self.session.manifest_path = None
+
+            manifest_path = find_manifest(p)
+            record_id = None
+            manifest_path_str = None
+
+            if manifest_path:
+                service = get_manifest_service(str(manifest_path))
+                manifest_data = service.load()  # это объект Manifest
+                if manifest_data is not None:
+                    for rec_id, rec in manifest_data.records.items():
+                        if rec.filename == p.name:
+                            record_id = rec_id
+                            manifest_path_str = str(manifest_path)
+                            break
+                    if record_id is None:
+                        self.result_text.setPlainText(
+                            f"Запись для файла {p.name} не найдена в манифесте.\n"
+                            "Переименование и обновление манифеста будут недоступны."
+                        )
+                else:
+                    self.result_text.setPlainText("Не удалось загрузить манифест.")
+            else:
+                self.result_text.setPlainText("Манифест не найден. Переименование и обновление манифеста будут недоступны.")
+
+            self.session.manifest_path = manifest_path_str
+            self.session.record_id = record_id
+
             self._load_pdf(str(p))
             return
 
@@ -605,9 +641,9 @@ class Ocr_fPage(QWidget):
             QMessageBox.warning(self, "Ошибка", "Не выбран PDF или не выделена область.")
             return
 
-        config = load_config()
+        config = self.config_service.get_config()
         self.ocr_workflow.ensure_storage(
-            enabled=config.get("ocr_storage_enabled", False),
+            enabled=config.ocr_storage_enabled,
             storage_path=Path("ocr_storage")
         )
 
@@ -671,27 +707,19 @@ class Ocr_fPage(QWidget):
                         self.ocr_workflow.update_zone_text(self.session.zone_ids[idx], new_txt)
 
         # --- 2. Получение шаблона ---
-        selected_idx = get_selected_template_index()
+        selected_idx = self.config_service.get_selected_template_index()
         pattern = None
         structure_pattern = None
         if selected_idx >= 0:
-            templates = get_templates()
+            templates = self.config_service.get_templates()
             if selected_idx < len(templates):
                 tpl = templates[selected_idx]
-                pattern = tpl.get("pattern")
-                structure_pattern = tpl.get("structure")
+                pattern = tpl.pattern
+                structure_pattern = tpl.structure
             else:
-                set_selected_template_index(-1)
+                self.config_service.set_selected_template_index(-1)
 
-        # --- 3. Проверяем наличие record_id ---
-        record_id = self.session.record_id
-        manifest_path = self.session.manifest_path if self.session.input_mode == "folder" else find_manifest(old_file)
-
-        if not manifest_path or not record_id:
-            QMessageBox.warning(self, "Ошибка", "Не найден ID записи в манифесте")
-            return
-
-        # --- 4. Переименование ---
+        # --- 3. Переименование ---
         try:
             new_file = self.file_workflow.apply_rename(
                 pdf_path=old_file,
@@ -707,27 +735,39 @@ class Ocr_fPage(QWidget):
             QMessageBox.critical(self, "Ошибка", f"Не удалось переименовать файл:\n{e}")
             return
 
-        # --- 5. Обновление манифеста по ID ---
-        try:
-            self.file_workflow.update_manifest_by_record_id(
-                record_id=record_id,
-                manifest_path=Path(manifest_path),
-                template_pattern=pattern,
-                zone_texts=self.session.zone_texts,
-                structure_pattern=structure_pattern,
-                new_path=new_file,
-            )
-        except Exception as e:
-            QMessageBox.warning(self, "Ошибка обновления манифеста", str(e))
+        # --- 4. Обновление манифеста (только если есть и путь, и ID) ---
+        record_id = self.session.record_id
+        manifest_path = self.session.manifest_path if self.session.input_mode == "folder" else find_manifest(old_file)
 
-        # --- 6. Переход к следующему PDF в папке ---
+        if manifest_path and record_id:
+            try:
+                self.file_workflow.update_manifest_by_record_id(
+                    record_id=record_id,
+                    manifest_path=Path(manifest_path),
+                    template_pattern=pattern,
+                    zone_texts=self.session.zone_texts,
+                    structure_pattern=structure_pattern,
+                    new_path=new_file,
+                )
+            except Exception as e:
+                QMessageBox.warning(self, "Ошибка обновления манифеста", str(e))
+        else:
+            if manifest_path and not record_id:
+                QMessageBox.warning(
+                    self,
+                    "Предупреждение",
+                    "Файл не найден в манифесте. Манифест не будет обновлён."
+                )
+            # если манифеста нет, просто пропускаем
+
+        # --- 5. Переход к следующему PDF в папке ---
         if self.session.input_mode == "folder":
             self.session.current_index += 1
             if self.session.current_index < len(self.session.queue_ids):
                 next_id = self.session.queue_ids[self.session.current_index]
                 self.session.record_id = next_id
                 service = get_manifest_service(self.session.manifest_path)
-                manifest = service.load()  # <-- загружаем
+                manifest = service.load()
                 if manifest is None:
                     QMessageBox.critical(self, "Ошибка", "Не удалось загрузить манифест")
                     return

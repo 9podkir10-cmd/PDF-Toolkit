@@ -92,12 +92,10 @@ class ManifestService:
         total = len(records)
         unique = sum(1 for r in records if not r.deduplication.is_duplicate)
         duplicates = total - unique
-        processed = sum(1 for r in records if r.ocr.status not in ("pending", "processing"))
         total_size = sum(r.size for r in records)
         self._manifest.stats.total = total
         self._manifest.stats.unique = unique
         self._manifest.stats.duplicates = duplicates
-        self._manifest.stats.processed = processed
         self._manifest.stats.total_size_bytes = total_size
         
     def load(self) -> Optional[Manifest]:

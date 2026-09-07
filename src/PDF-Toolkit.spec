@@ -8,7 +8,9 @@ a = Analysis(
         ('dlls/libzbar-64.dll', '.'),
         ('dlls/libiconv.dll', '.'),
     ],
-    datas=[],
+    datas=[
+        (r'assets/icon.ico', '.'),
+    ],
     hiddenimports=['pytesseract'],
     hookspath=[],
     hooksconfig={},

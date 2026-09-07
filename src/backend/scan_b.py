@@ -1,13 +1,9 @@
-import os
-import tempfile
-import shutil
+import os, tempfile, shutil
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-
 from PIL import Image, ImageEnhance
-
 from backend.barcodes import process_single_pdf_file
-from backend.config import get_scan_profiles
+from backend.config import get_config_service
 from backend.scanning.twain_scanner import TwainScanner, Scanner
 from backend.scanning.mock_scanner import MockScanner
 
@@ -16,31 +12,40 @@ try:
 except ImportError:
     twain = None
 
-
 class ScannerBackend:
     def __init__(self, profile_name: str = None, use_mock: bool = False):
-        self.profile = None
-        if profile_name:
-            profiles = get_scan_profiles()
-            for p in profiles:
-                if p.get("name") == profile_name:
-                    self.profile = p
-                    break
-        if self.profile is None:
-            self.profile = {
-                "name": "default",
-                "dpi": 300,
-                "color_mode": "color",
-                "page_size": "A4",
-                "file_format": "pdf",
-                "brightness": 0,
-                "contrast": 0,
-                "duplex": False,
-            }
+        self.config_service = get_config_service()
+        self.profile = self._load_profile(profile_name)
         self.scanner: Optional[Scanner] = None
         self._selected_scanner_name: Optional[str] = None
         self._temp_dir = None
         self.use_mock = use_mock
+
+    def _load_profile(self, profile_name: Optional[str]) -> Dict[str, Any]:
+        if profile_name:
+            profiles = self.config_service.get_scan_profiles()
+            for p in profiles:
+                if p.name == profile_name:
+                    return {
+                        "name": p.name,
+                        "dpi": p.dpi,
+                        "color_mode": p.color_mode,
+                        "page_size": p.page_size,
+                        "file_format": p.file_format,
+                        "brightness": p.brightness,
+                        "contrast": p.contrast,
+                        "duplex": p.duplex,   # теперь есть
+                    }
+        return {
+            "name": "default",
+            "dpi": 300,
+            "color_mode": "color",
+            "page_size": "A4",
+            "file_format": "pdf",
+            "brightness": 0,
+            "contrast": 0,
+            "duplex": False,
+        }
 
     def _ensure_scanner(self) -> None:
         if self.scanner is None:
@@ -177,11 +182,6 @@ class ScannerBackend:
         barcode_modes: Optional[List[str]] = None,
         split_by_count: Optional[int] = None,
     ) -> List[str]:
-        """
-        Сканирует и сохраняет результат в PDF.
-        Если split_by_barcode=True – разделяет по штрих-кодам.
-        Если split_by_count задан – разбивает на части по указанному числу страниц.
-        """
         if barcode_modes is None:
             barcode_modes = ["patch1", "patch2", "patch3", "patch4", "patchT"]
 
@@ -246,12 +246,23 @@ class ScannerBackend:
             pass
 
 def get_scanner_profile(profile_name: str) -> Optional[Dict[str, Any]]:
-    profiles = get_scan_profiles()
+    config_service = get_config_service()
+    profiles = config_service.get_scan_profiles()
     for p in profiles:
-        if p.get("name") == profile_name:
-            return p
+        if p.name == profile_name:
+            return {
+                "name": p.name,
+                "dpi": p.dpi,
+                "color_mode": p.color_mode,
+                "page_size": p.page_size,
+                "file_format": p.file_format,
+                "brightness": p.brightness,
+                "contrast": p.contrast,
+                "duplex": p.duplex,
+            }
     return None
 
 
 def list_scan_profiles() -> List[str]:
-    return [p.get("name", "unnamed") for p in get_scan_profiles()]
+    config_service = get_config_service()
+    return [p.name for p in config_service.get_scan_profiles()]

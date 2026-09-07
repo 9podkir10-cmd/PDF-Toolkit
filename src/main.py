@@ -1,7 +1,4 @@
-import sys
-import argparse
-import multiprocessing
-
+import sys, argparse, multiprocessing
 
 def parse_arguments():
     parser = argparse.ArgumentParser(

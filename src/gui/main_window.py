@@ -1,20 +1,6 @@
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QHBoxLayout,
-    QMainWindow,
-    QStackedWidget,
-    QWidget,
-)
-
+from PySide6.QtWidgets import (QHBoxLayout, QMainWindow, QStackedWidget, QWidget)
 from .sidebar import Sidebar
-from .pages import (
-    DashboardPage,
-    SplitPage,
-    ExportPage,
-    Ocr_fPage,
-    ScanPage,
-    SettingsPage
-)
+from .pages import (DashboardPage, SplitPage, ExportPage, Ocr_fPage, ScanPage, SettingsPage)
 
 
 class MainWindow(QMainWindow):

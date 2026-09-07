@@ -1,9 +1,7 @@
 from PySide6.QtCore import Qt, QRectF, Signal
 from PySide6.QtGui import QPixmap, QPainter, QPen, QColor, QAction, QKeySequence
-from PySide6.QtWidgets import (
-    QWidget, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
-    QGraphicsRectItem, QVBoxLayout, QHBoxLayout, QPushButton, QButtonGroup
-)
+from PySide6.QtWidgets import (QWidget, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
+    QGraphicsRectItem, QVBoxLayout, QHBoxLayout, QPushButton, QButtonGroup, QLabel)
 import pymupdf
 from backend.services.box_to_img import Region
 
@@ -208,6 +206,12 @@ class PDFViewer(QWidget):
         self.toolbar = QHBoxLayout()
         self.btn_back = QPushButton("Назад")
         self.btn_back.setToolTip("Ctrl+Left")
+        
+        self.counter_label = QLabel("—")
+        self.counter_label.setAlignment(Qt.AlignCenter)
+        self.counter_label.setMinimumWidth(60)
+        self.counter_label.setStyleSheet("font-size: 12px; font-weight: bold;")
+                
         self.btn_forward = QPushButton("Вперёд")
         self.btn_forward.setToolTip("Ctrl+Right")
 
@@ -234,6 +238,7 @@ class PDFViewer(QWidget):
         self.toolbar.addStretch()
 
         self.toolbar.addWidget(self.btn_back)
+        self.toolbar.addWidget(self.counter_label)
         self.toolbar.addWidget(self.btn_forward)
 
         layout = QVBoxLayout(self)
@@ -316,6 +321,12 @@ class PDFViewer(QWidget):
         self.forward_requested.emit()  
 
     # Прокси-методы
+    def update_counter(self, current: int, total: int):
+        if total == 0:
+            self.counter_label.setText("—")
+        else:
+            self.counter_label.setText(f"{current} / {total}")
+    
     def load_pdf(self, pdf_path: str, page_num: int = 0):
         self.view.load_pdf(pdf_path, page_num)
 

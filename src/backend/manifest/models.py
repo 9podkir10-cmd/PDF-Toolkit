@@ -11,7 +11,7 @@ class DeduplicationInfo(BaseModel):
     linked_files: List[str] = Field(default_factory=list, description="ID файлов-дубликатов, если это оригинал")
 
 class OcrInfo(BaseModel):
-    status: str = Field(default="pending", description="Статус OCR: pending, processing, completed, failed, not_processed")
+    status: str = Field(default="pending", description="Статус OCR: pending, completed, failed")
     is_recognized: bool = Field(default=False, description="Был ли текст успешно распознан")
     used_template: Optional[str] = Field(default=None, description="Имя использованного OCR-шаблона")
     zone_texts: List[str] = Field(default_factory=list, description="Список распознанных текстов из зон")
@@ -41,12 +41,9 @@ class SourceConfig(BaseModel):
 class OutputConfig(BaseModel):
      directory: str = Field(..., description="Путь к папке для структурированных файлов (hardlink)")
 
-class PipelineStatus(BaseModel):
-    status: str = Field(default="idle", description="Статус пайплайна: idle, running, completed, failed")
-
 class Statistics(BaseModel):
     total: int = Field(default=0, ge=0, description="Общее количество файлов")
-    processed: int = Field(default=0, ge=0, description="Количество обработанных файлов")
+    # processed: int = Field(default=0, ge=0, description="Количество обработанных файлов")
     unique: int = Field(default=0, ge=0, description="Количество уникальных файлов")
     duplicates: int = Field(default=0, ge=0, description="Количество файлов-дубликатов")
     errors: int = Field(default=0, ge=0, description="Количество файлов с ошибками")
@@ -60,7 +57,6 @@ class Manifest(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.now, description="Дата и время последнего обновления")
     source: SourceConfig = Field(..., description="Конфигурация источника")
     output: OutputConfig = Field(..., description="Конфигурация вывода")
-    pipeline: PipelineStatus = Field(default_factory=PipelineStatus, description="Статус выполнения пайплайна")
     stats: Statistics = Field(default_factory=Statistics, description="Статистика обработки")
 
     records: Dict[str, FileRecord] = Field(default_factory=dict, description="Словарь записей о файлах (ключ — ID файла)")
@@ -85,10 +81,9 @@ class Manifest(BaseModel):
                     "updated_at": "2026-09-02T10:45:12.654321+00:00",
                     "source": {"directory": "/mnt/storage/documents"},
                     "output": {"directory": "/mnt/storage/documents_hardlink"},
-                    "pipeline": {"status": "completed"},
                     "stats": {
                         "total": 3,
-                        "processed": 3,
+                        # "processed": 3,
                         "unique": 2,
                         "duplicates": 1,
                         "errors": 0,

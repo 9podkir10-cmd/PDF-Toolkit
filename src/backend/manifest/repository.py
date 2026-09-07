@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
 from filelock import FileLock
 from .models import Manifest
 

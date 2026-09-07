@@ -1,87 +1,61 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QWidget,
-    QLabel,
-    QPushButton,
-    QLineEdit,
-    QVBoxLayout,
-    QHBoxLayout,
-    QFormLayout,
-    QMessageBox,
-    QFileDialog,
-    QButtonGroup,
-    QSizePolicy,
-    QCheckBox,
-    QListWidget,
-    QDialog,
-    QListWidgetItem,
-    QDialogButtonBox,
-)
+from PySide6.QtWidgets import (QWidget, QLabel, QPushButton, QLineEdit, QSpinBox,
+    QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox, QFileDialog, QComboBox,
+    QButtonGroup, QSizePolicy, QCheckBox, QListWidget, QDialog, QDialogButtonBox)
 from typing import Optional
 from gui.signals import app_signals
-from backend.config import (
-    lang_to_id,
-    load_config,
-    save_main_settings,
-    id_to_lang_string,
-    get_config_path,
-    get_templates,
-    save_templates,
-    set_selected_template_index,
-    get_selected_template_index,
-    get_scan_profiles,   
-    save_scan_profiles
-)
+from backend.config import get_config_service
+from backend.config.models import Template, ScanProfile
+from backend.config.utils import lang_to_id, id_to_lang_string
+
 
 class SettingsPage(QWidget):
     def __init__(self):
         super().__init__()
-        self.current_config = load_config()
+        self.config_service = get_config_service()
         self._build_ui()
         self._apply_initial_settings()
-        self._load_templates_list() 
+        self._load_templates_list()
         self._load_profiles_list()
         self.add_profile_btn.clicked.connect(self._add_profile)
         self.edit_profile_btn.clicked.connect(self._edit_profile)
-        self.delete_profile_btn.clicked.connect(self._delete_profile)       
+        self.delete_profile_btn.clicked.connect(self._delete_profile)
 
     def _build_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         main_layout.setContentsMargins(30, 30, 30, 30)
         main_layout.setSpacing(20)
-        
+
         title = QLabel("Settings")
         title.setStyleSheet("font-size: 24px; font-weight: bold;")
         main_layout.addWidget(title)
 
         form = QFormLayout()
         form.setSpacing(15)
-        
+
         # ---- OCR Engine ----
         self.input_edit = QLineEdit()
-        if self.current_config.get("ocr_path"):
-            self.input_edit.setPlaceholderText("Path already set")
         self.input_button = QPushButton("Browse")
         self.input_button.clicked.connect(self._browse_ocr_file)
         input_layout = QHBoxLayout()
         input_layout.addWidget(self.input_edit)
         input_layout.addWidget(self.input_button)
         form.addRow("OCR-Engine:", input_layout)
-        
-        # ---- OCR Storage ----        
+
+        # ---- OCR Storage ----
         self.ocr_storage_checkbox = QCheckBox("Enable OCR Storage")
         self.ocr_storage_checkbox.setToolTip("If enabled, OCR results will be stored locally.")
         self.ocr_storage_checkbox.stateChanged.connect(lambda: self._save_current_settings())
-        form.addRow("Storage:", self.ocr_storage_checkbox)        
+        form.addRow("Storage:", self.ocr_storage_checkbox)
         main_layout.addLayout(form)
-        
+
         # ---- Language Buttons ----
         buttons_layout = QHBoxLayout()
         buttons_layout.setSpacing(10)
         self.ruseng_button = QPushButton("RUS+ENG")
         self.rus_button = QPushButton("RUS")
-        self.eng_button = QPushButton("ENG") 
+        self.eng_button = QPushButton("ENG")
         buttons = [self.ruseng_button, self.rus_button, self.eng_button]
         for button in buttons:
             button.setMinimumHeight(40)
@@ -90,17 +64,17 @@ class SettingsPage(QWidget):
                 QSizePolicy.Policy.Expanding,
                 QSizePolicy.Policy.Fixed,
             )
-            buttons_layout.addWidget(button) 
+            buttons_layout.addWidget(button)
         self.button_group = QButtonGroup(self)
         self.button_group.addButton(self.ruseng_button, id=0)
         self.button_group.addButton(self.rus_button, id=1)
         self.button_group.addButton(self.eng_button, id=2)
         self.ruseng_button.setChecked(True)
         self.button_group.idClicked.connect(self._language_selected)
-        
+
         main_layout.addWidget(QLabel("Language:"))
         main_layout.addLayout(buttons_layout)
-        
+
         # ---- Rename templates ----
         main_layout.addSpacing(20)
         main_layout.addWidget(QLabel("Шаблоны переименования:"))
@@ -123,8 +97,8 @@ class SettingsPage(QWidget):
         btn_layout.addWidget(self.delete_template_btn)
         btn_layout.addStretch()
         templates_layout.addLayout(btn_layout)
-        main_layout.addLayout(templates_layout) 
-        
+        main_layout.addLayout(templates_layout)
+
         # ---- Scan profiles ----
         main_layout.addSpacing(20)
         main_layout.addWidget(QLabel("Профили сканирования:"))
@@ -146,58 +120,53 @@ class SettingsPage(QWidget):
         btn_layout_profiles.addStretch()
         profiles_layout.addLayout(btn_layout_profiles)
         main_layout.addLayout(profiles_layout)
+
         main_layout.addStretch()
-          
-        main_layout.addStretch()
-        
+
     def _apply_initial_settings(self):
-        ocr_path = self.current_config.get("ocr_path", "")
-        saved_lang = self.current_config.get("language", "rus+eng")
-        storage_enabled = self.current_config.get("ocr_storage_enabled", False)
-        
+        config = self.config_service.get_config()
+        ocr_path = config.ocr_path
+        saved_lang = config.language
+        storage_enabled = config.ocr_storage_enabled
+
         self.input_edit.setText(ocr_path)
-        
         self.ocr_storage_checkbox.blockSignals(True)
         self.ocr_storage_checkbox.setChecked(storage_enabled)
         self.ocr_storage_checkbox.blockSignals(False)
-        
+
         target_id = lang_to_id(saved_lang)
-        
         btn = self.button_group.button(target_id)
         if btn:
             btn.setChecked(True)
 
     def _browse_ocr_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, 
-            "Select OCR Engine Executable", 
-            "", 
+            self,
+            "Select OCR Engine Executable",
+            "",
             "Executables (*.exe)"
         )
-        
         if file_path:
             self.input_edit.setText(file_path)
             self._save_current_settings()
 
-    def _language_selected(self, id):
+    def _language_selected(self, _id):
         self._save_current_settings()
 
     def _load_templates_list(self):
         self.templates_list.clear()
-        templates = get_templates()
-        for idx, tpl in enumerate(templates):
-            if isinstance(tpl, dict):
-                display = tpl.get("name", tpl.get("pattern", f"Шаблон {idx+1}"))
-            else:
-                display = str(tpl)
+        templates = self.config_service.get_templates()
+        for tpl in templates:
+            display = tpl.name or tpl.pattern
             self.templates_list.addItem(display)
 
     def _add_template(self):
         result = self._show_template_dialog("Добавить шаблон")
         if result is not None:
-            templates = get_templates()
-            templates.append(result)
-            if save_templates(templates):
+            templates = self.config_service.get_templates()
+            new_template = Template(**result)
+            templates.append(new_template)
+            if self.config_service.save_templates(templates):
                 self._load_templates_list()
                 app_signals.templates_changed.emit()
             else:
@@ -208,20 +177,19 @@ class SettingsPage(QWidget):
         if current_row < 0:
             QMessageBox.warning(self, "Предупреждение", "Выберите шаблон для редактирования.")
             return
-        templates = get_templates()
+        templates = self.config_service.get_templates()
         old = templates[current_row]
         result = self._show_template_dialog(
             "Редактировать шаблон",
-            initial_name=old.get("name", ""),
-            initial_pattern=old.get("pattern", ""),
-            initial_structure=old.get("structure", "")
+            initial_name=old.name,
+            initial_pattern=old.pattern,
+            initial_structure=old.structure
         )
         if result is not None:
-            templates[current_row] = result
-            if save_templates(templates):
+            templates[current_row] = Template(**result)
+            if self.config_service.save_templates(templates):
                 self._load_templates_list()
                 app_signals.templates_changed.emit()
-                # Если выбранный индекс был на этом шаблоне, можно оставить
             else:
                 QMessageBox.critical(self, "Ошибка", "Не удалось сохранить изменения.")
 
@@ -230,18 +198,20 @@ class SettingsPage(QWidget):
         if current_row < 0:
             QMessageBox.warning(self, "Предупреждение", "Выберите шаблон для удаления.")
             return
-        reply = QMessageBox.question(self, "Удаление", "Удалить выбранный шаблон?",
-                                    QMessageBox.Yes | QMessageBox.No)
+        reply = QMessageBox.question(
+            self, "Удаление", "Удалить выбранный шаблон?",
+            QMessageBox.Yes | QMessageBox.No
+        )
         if reply == QMessageBox.Yes:
-            templates = get_templates()
+            templates = self.config_service.get_templates()
             del templates[current_row]
-            if save_templates(templates):
+            if self.config_service.save_templates(templates):
                 self._load_templates_list()
                 app_signals.templates_changed.emit()
                 # Если удалён выбранный индекс, сбросить выбор
-                selected = get_selected_template_index()
+                selected = self.config_service.get_selected_template_index()
                 if selected == current_row or selected >= len(templates):
-                    set_selected_template_index(-1)
+                    self.config_service.set_selected_template_index(-1)
             else:
                 QMessageBox.critical(self, "Ошибка", "Не удалось удалить шаблон.")
 
@@ -255,21 +225,18 @@ class SettingsPage(QWidget):
         dialog.setMinimumWidth(600)
         layout = QVBoxLayout(dialog)
 
-        # Поле Name
         layout.addWidget(QLabel("Название шаблона (отображается в списке):"))
         name_edit = QLineEdit(initial_name)
         name_edit.setPlaceholderText("Например: Счет-фактура")
         layout.addWidget(name_edit)
 
-        # Поле Pattern
         layout.addWidget(QLabel("Шаблон переименования (используйте {zone0}, {zone1}, ...):"))
         pattern_edit = QLineEdit(initial_pattern)
         pattern_edit.setPlaceholderText("Например: Счет {zone0} от {zone1}")
         layout.addWidget(pattern_edit)
 
-        # Поле Structure
         layout.addWidget(QLabel("Шаблон структуры папок (оставьте пустым, если не нужно):"))
-        structure_edit = QLineEdit(initial_structure)
+        structure_edit = QLineEdit(initial_structure or "")
         structure_edit.setPlaceholderText("Например: {zone0}/{zone1} или Счета/{zone0}")
         layout.addWidget(structure_edit)
 
@@ -290,29 +257,25 @@ class SettingsPage(QWidget):
                 QMessageBox.warning(self, "Ошибка", "Шаблон переименования не может быть пустым.")
                 return None
 
-            return {
-                "name": name,
-                "pattern": pattern,
-                "structure": structure
-            }
+            return {"name": name, "pattern": pattern, "structure": structure}
         return None
 
     def _load_profiles_list(self):
         self.profiles_list.clear()
-        profiles = get_scan_profiles()
+        profiles = self.config_service.get_scan_profiles()
         for profile in profiles:
-            name = profile.get("name", "Без имени")
-            self.profiles_list.addItem(name)
+            self.profiles_list.addItem(profile.name)
 
     def _add_profile(self):
         profile_data = self._show_profile_dialog("Добавить профиль", None)
         if profile_data is not None:
-            profiles = get_scan_profiles()
-            if any(p.get("name") == profile_data["name"] for p in profiles):
+            profiles = self.config_service.get_scan_profiles()
+            if any(p.name == profile_data["name"] for p in profiles):
                 QMessageBox.warning(self, "Ошибка", "Профиль с таким именем уже существует.")
                 return
-            profiles.append(profile_data)
-            if save_scan_profiles(profiles):
+            new_profile = ScanProfile(**profile_data)
+            profiles.append(new_profile)
+            if self.config_service.save_scan_profiles(profiles):
                 self._load_profiles_list()
             else:
                 QMessageBox.critical(self, "Ошибка", "Не удалось сохранить профиль.")
@@ -322,16 +285,17 @@ class SettingsPage(QWidget):
         if current_row < 0:
             QMessageBox.warning(self, "Предупреждение", "Выберите профиль для редактирования.")
             return
-        profiles = get_scan_profiles()
+        profiles = self.config_service.get_scan_profiles()
         old_profile = profiles[current_row]
-        new_profile = self._show_profile_dialog("Редактировать профиль", old_profile)
-        if new_profile is not None and new_profile != old_profile:
-            if new_profile["name"] != old_profile["name"]:
-                if any(p.get("name") == new_profile["name"] for p in profiles if p != old_profile):
+        new_profile_data = self._show_profile_dialog("Редактировать профиль", initial_profile=old_profile.model_dump())
+        if new_profile_data is not None:
+            new_profile = ScanProfile(**new_profile_data)
+            if new_profile.name != old_profile.name:
+                if any(p.name == new_profile.name for p in profiles if p != old_profile):
                     QMessageBox.warning(self, "Ошибка", "Профиль с таким именем уже существует.")
                     return
             profiles[current_row] = new_profile
-            if save_scan_profiles(profiles):
+            if self.config_service.save_scan_profiles(profiles):
                 self._load_profiles_list()
             else:
                 QMessageBox.critical(self, "Ошибка", "Не удалось сохранить изменения.")
@@ -341,55 +305,49 @@ class SettingsPage(QWidget):
         if current_row < 0:
             QMessageBox.warning(self, "Предупреждение", "Выберите профиль для удаления.")
             return
-        reply = QMessageBox.question(self, "Удаление", "Удалить выбранный профиль?",
-                                    QMessageBox.Yes | QMessageBox.No)
+        reply = QMessageBox.question(
+            self, "Удаление", "Удалить выбранный профиль?",
+            QMessageBox.Yes | QMessageBox.No
+        )
         if reply == QMessageBox.Yes:
-            profiles = get_scan_profiles()
+            profiles = self.config_service.get_scan_profiles()
             del profiles[current_row]
-            if save_scan_profiles(profiles):
+            if self.config_service.save_scan_profiles(profiles):
                 self._load_profiles_list()
             else:
                 QMessageBox.critical(self, "Ошибка", "Не удалось удалить профиль.")
 
     def _show_profile_dialog(self, title: str, initial_profile: Optional[dict]) -> Optional[dict]:
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QSpinBox, QComboBox, QDialogButtonBox, QLabel
-
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
         layout = QVBoxLayout(dialog)
 
-        # Имя профиля
         name_edit = QLineEdit()
         name_edit.setPlaceholderText("Название профиля")
         layout.addWidget(QLabel("Имя:"))
         layout.addWidget(name_edit)
 
-        # Разрешение (DPI)
         dpi_spin = QSpinBox()
         dpi_spin.setRange(50, 1200)
         dpi_spin.setValue(300)
         layout.addWidget(QLabel("Разрешение (DPI):"))
         layout.addWidget(dpi_spin)
 
-        # Цветовой режим
         color_combo = QComboBox()
         color_combo.addItems(["Цветной", "Оттенки серого", "Черно-белый"])
         layout.addWidget(QLabel("Цветовой режим:"))
         layout.addWidget(color_combo)
 
-        # Размер страницы
         size_combo = QComboBox()
         size_combo.addItems(["A4", "A5", "Letter", "Legal"])
         layout.addWidget(QLabel("Размер страницы:"))
         layout.addWidget(size_combo)
 
-        # Формат файла
         format_combo = QComboBox()
         format_combo.addItems(["PDF", "JPEG", "PNG"])
         layout.addWidget(QLabel("Формат файла:"))
         layout.addWidget(format_combo)
 
-        # Яркость и контрастность (опционально)
         brightness_spin = QSpinBox()
         brightness_spin.setRange(-100, 100)
         brightness_spin.setValue(0)
@@ -402,18 +360,16 @@ class SettingsPage(QWidget):
         layout.addWidget(QLabel("Контрастность:"))
         layout.addWidget(contrast_spin)
 
-        # Если редактируем – заполняем поля
         if initial_profile:
             name_edit.setText(initial_profile.get("name", ""))
             dpi_spin.setValue(initial_profile.get("dpi", 300))
             color_map = {"color": 0, "gray": 1, "bw": 2}
             color_combo.setCurrentIndex(color_map.get(initial_profile.get("color_mode", "color"), 0))
             size_combo.setCurrentText(initial_profile.get("page_size", "A4"))
-            format_combo.setCurrentText(initial_profile.get("file_format", "PDF"))
+            format_combo.setCurrentText(initial_profile.get("file_format", "PDF").upper())
             brightness_spin.setValue(initial_profile.get("brightness", 0))
             contrast_spin.setValue(initial_profile.get("contrast", 0))
 
-        # Кнопки OK/Cancel
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
@@ -425,7 +381,6 @@ class SettingsPage(QWidget):
                 QMessageBox.warning(self, "Ошибка", "Имя профиля не может быть пустым.")
                 return None
 
-            # Преобразуем выбранный цветовой режим в строковое значение для хранения
             color_text = color_combo.currentText()
             if color_text == "Цветной":
                 color_mode = "color"
@@ -439,7 +394,7 @@ class SettingsPage(QWidget):
                 "dpi": dpi_spin.value(),
                 "color_mode": color_mode,
                 "page_size": size_combo.currentText(),
-                "file_format": format_combo.currentText().lower(),  # pdf, jpeg, png
+                "file_format": format_combo.currentText().lower(),
                 "brightness": brightness_spin.value(),
                 "contrast": contrast_spin.value(),
             }
@@ -449,13 +404,11 @@ class SettingsPage(QWidget):
         ocr_path = self.input_edit.text().strip()
         lang_id = self.button_group.checkedId()
         ocr_storage_enabled = self.ocr_storage_checkbox.isChecked()
-        
+
         if lang_id == -1:
             lang_id = 0
-            
         lang_str = id_to_lang_string(lang_id)
-        
-        success = save_main_settings(ocr_path, lang_str, ocr_storage_enabled)
-        
+
+        success = self.config_service.update_main_settings(ocr_path, lang_str, ocr_storage_enabled)
         if not success:
-            QMessageBox.critical(self, "Error", "Failed to save configuration!")        
+            QMessageBox.critical(self, "Error", "Failed to save configuration!")
