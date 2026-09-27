@@ -360,6 +360,9 @@ class SettingsPage(QWidget):
         layout.addWidget(QLabel("Контрастность:"))
         layout.addWidget(contrast_spin)
 
+        duplex_check = QCheckBox("Двустороннее сканирование")
+        layout.addWidget(duplex_check)
+
         if initial_profile:
             name_edit.setText(initial_profile.get("name", ""))
             dpi_spin.setValue(initial_profile.get("dpi", 300))
@@ -369,6 +372,7 @@ class SettingsPage(QWidget):
             format_combo.setCurrentText(initial_profile.get("file_format", "PDF").upper())
             brightness_spin.setValue(initial_profile.get("brightness", 0))
             contrast_spin.setValue(initial_profile.get("contrast", 0))
+            duplex_check.setChecked(initial_profile.get("duplex", False))
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(dialog.accept)
@@ -397,6 +401,7 @@ class SettingsPage(QWidget):
                 "file_format": format_combo.currentText().lower(),
                 "brightness": brightness_spin.value(),
                 "contrast": contrast_spin.value(),
+                "duplex": duplex_check.isChecked(),
             }
         return None
 

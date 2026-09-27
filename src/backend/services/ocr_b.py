@@ -41,8 +41,19 @@ class OCRBackend:
     def recognize(self, image: Image.Image) -> str:
         self._ensure_tesseract()
         processed = self._preprocess(image)
-        text = pytesseract.image_to_string(processed, lang=self.language)
-        return text.strip()
+        
+        try:
+            text = pytesseract.image_to_string(processed, lang=self.language, config="--oem 3")
+            return text.strip()
+
+        except Exception as e:
+            raise RuntimeError(
+                f"OCR ERROR\n"
+                f"Tesseract: {self.tesseract_cmd}\n"
+                f"Language: {self.language}\n"
+                f"Exists: {os.path.exists(self.tesseract_cmd)}\n"
+                f"Error: {e}"
+            ) from e
 
     def recognize_batch(self, images: List[Image.Image]) -> List[str]:
         self._ensure_tesseract()

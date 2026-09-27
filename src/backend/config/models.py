@@ -73,7 +73,8 @@ class Config(BaseModel):
                             "page_size": "A4",
                             "file_format": "pdf",
                             "brightness": 3,
-                            "contrast": 1
+                            "contrast": 1,
+                            "duplex": True,
                         }
                     ]
                 }
