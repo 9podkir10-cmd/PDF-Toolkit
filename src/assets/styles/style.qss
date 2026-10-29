@@ -1,0 +1,161 @@
+QToolTip {
+    background-color: #2b2b2b; /* Темный фон, как у вашей панели */
+    color: #ffffff;            /* Белый текст */
+    border: 1px solid #555555; /* Тонкая рамка, чтобы сливалось с темой */
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+
+
+
+
+
+/* Sidebar */
+#sidebar QPushButton {
+    border: none;
+    background-color: transparent;
+    border-radius: 8px;
+}
+
+#sidebar QPushButton:hover {
+    background-color: #2d3748;
+}
+
+#sidebar QPushButton[active="true"] {
+    background-color: #1a56db;
+}
+
+#sidebar QPushButton[active="true"]:hover {
+    background-color: #1e3a8a;
+}
+
+/* --- Сайдбары --- */
+
+/* Первый сайдбар (с иконками) */
+#sidebar {
+    background-color: #181818;
+    /* Внутренняя граница между 1 и 2 сайдбаром */
+    border-right: 1px solid #333333; 
+}
+
+/* Второй сайдбар (с контентом) */
+#secondarySidebar {
+    background-color: #181818;
+    /* Убираем правую границу, так как её будет рисовать QSplitter */
+    border: none; 
+}
+
+/* Основной контент */
+#mainContent {
+    background-color: #1e1e1e;
+}
+
+/* --- Линия-разделитель (ручка QSplitter) --- */
+QSplitter::handle:horizontal {
+    background-color: #333333; /* Цвет полоски */
+}
+
+/* Эффект при наведении на полоску (чтобы было понятно, что её можно тянуть) */
+QSplitter::handle:horizontal:hover {
+    background-color: #555555; 
+}
+
+
+
+
+
+
+
+
+/* TitleBar */
+#customTitleBar QPushButton {
+    border: none;
+    background-color: transparent;
+    padding: 0px;
+    margin: 0px;
+    border-radius: 0px;
+    width: 46px;
+    height: 32px;
+}
+
+#customTitleBar QPushButton:hover {
+    background-color: #444444;
+}
+
+#customTitleBar #btnClose:hover {
+    background-color: #e81123;
+}
+
+#customTitleBar #btnClose:pressed {
+    background-color: #c50f1f;
+}
+
+
+QLineEdit#pathEdit {
+    background-color: #1e1e1e;
+    color: #cccccc;
+    border: 1px solid #333333;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+QLineEdit#pathEdit:focus {
+    border: 1px solid #007acc; /* Синяя рамка при фокусе, как в VS Code */
+    background-color: #252526;
+}
+
+
+
+
+
+
+
+/* --- Заголовок Explorer --- */
+#explorerHeader {
+    background-color: #181818;
+    border-bottom: 1px solid #2b2b2b; /* Тонкая линия под заголовком */
+}
+
+#explorerTitle {
+    font-size: 11px;
+    font-weight: bold;
+    color: #bbbbbb;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* --- Дерево файлов --- */
+#fileExplorer {
+    background-color: #181818;
+}
+
+/* ОСТАВЬТЕ ЭТО В style.qss */
+QTreeView {
+    background-color: #181818;
+    color: #cccccc;
+    border: none;
+    outline: 0;
+    show-decoration-selected: 0; /* Убирает желтую/серую полоску */
+}
+
+QTreeView::item {
+    height: 24px;
+    padding-left: 4px;
+}
+
+QTreeView::item:hover {
+    background-color: #2a2d2e;
+}
+
+QTreeView::item:selected {
+    background-color: #37373d;
+    color: #ffffff;
+}
+
+/* Прозрачный фон для веток, чтобы не было артефактов */
+QTreeView::branch {
+    background: transparent;
+}

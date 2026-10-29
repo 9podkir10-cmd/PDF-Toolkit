@@ -10,7 +10,7 @@ from backend.services.queue_service import PDFQueueService
 from backend.services.file_workflow import PDFFileWorkflow
 from backend.services.ocr_workflow import OCRWorkflow
 from backend.services.template_service import FilenameTemplateService
-from gui.widgets.pdf_viewer import PDFViewer
+from gui.widgets.viewer_for_index import PDFViewer
 from gui.widgets.models import OCRSession
 from gui.workers.ocr_worker import OCRWorker
 from gui.signals import app_signals
@@ -23,6 +23,7 @@ from backend.config import get_config_service
 class Ocr_fPage(QWidget):
     def __init__(self):
         super().__init__()
+        self.current_path = ""
         self.session = OCRSession() 
         self._ocr_running = False
         self._ocr_thread = None
@@ -72,20 +73,6 @@ class Ocr_fPage(QWidget):
 
         # Правая панель
         right_panel = QVBoxLayout()
-        right_panel.setSpacing(15)
-
-        # ---- Выбор файла ----
-        self.input_edit = QLineEdit()
-        self.input_button = QPushButton("Browse")
-        menu = QMenu(self)
-        menu.addAction("PDF File", self._browse_file)
-        menu.addAction("Folder", self._browse_folder)
-        self.input_button.setMenu(menu)
-
-        input_layout = QHBoxLayout()
-        input_layout.addWidget(self.input_edit)
-        input_layout.addWidget(self.input_button)
-        right_panel.addLayout(input_layout)
         right_panel.addSpacing(10)
 
         # ---- ocr buttons ----
@@ -162,7 +149,6 @@ class Ocr_fPage(QWidget):
         main_layout.addStretch()
 
     def _connect_signals(self):
-        self.input_edit.textChanged.connect(self._on_path_changed)
         self.ocr_button.clicked.connect(self._run_ocr)
         self.clear_button.clicked.connect(self._undo_selection)
         self.prev_btn.clicked.connect(self._prev_page)
@@ -171,31 +157,31 @@ class Ocr_fPage(QWidget):
         self.page_spin.valueChanged.connect(self._change_page)
         self.apply_btn.clicked.connect(self._apply_action)
         self.apply_shortcut = QShortcut(QKeySequence("Return"), self)
+        self.apply_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self.apply_shortcut.activated.connect(self.apply_btn.click)
         self.apply_shortcut_numpad = QShortcut(QKeySequence("Enter"), self)
+        self.apply_shortcut_numpad.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self.apply_shortcut_numpad.activated.connect(self.apply_btn.click)
         self.clear_shortcut = QShortcut(QKeySequence("Esc"), self)
         self.clear_shortcut.activated.connect(self.clear_button.click)
 
     # ---------- Навигация и загрузка ----------
-    def _browse_file(self):
-        filename, _ = QFileDialog.getOpenFileName(self, "Select PDF File", "", "PDF Files (*.pdf)")
-        if filename:
-            self.input_edit.setText(filename)
+    def open_file(self, file_path: str):
+        self.current_path = file_path
+        self._on_path_changed(file_path)
 
-    def _browse_folder(self):
-        directory = QFileDialog.getExistingDirectory(self, "Select Folder")
-        if not directory:
+    def open_folder(self, folder_path: str):
+        if not folder_path:
             return
 
         try:
-            normalizer = DirectoryNormalizer(directory)
+            normalizer = DirectoryNormalizer(folder_path)
             normalizer.normalize_structure()
         except Exception as e:
             QMessageBox.critical(self, "Ошибка нормализации", str(e))
             return
 
-        orig_path = Path(directory)
+        orig_path = Path(folder_path)
         normalized_path = orig_path.with_name(orig_path.name + "_hardlink")
         if not normalized_path.exists():
             normalized_path = orig_path
@@ -210,7 +196,7 @@ class Ocr_fPage(QWidget):
 
         pending_ids = self.queue_service.get_pending(normalized_path)
         if not pending_ids:
-            QMessageBox.information(self, "Информация", "Нет файлов для распознавания (возможно, все уже обработаны).")
+            QMessageBox.information(self, "Информация", "Нет файлов для распознавания.")
             return
 
         self.session.queue_ids = pending_ids
@@ -234,15 +220,13 @@ class Ocr_fPage(QWidget):
             QMessageBox.critical(self, "Ошибка", f"Файл не найден: {pdf_path}")
             return
 
-        self.input_edit.blockSignals(True)
-        self.input_edit.setText(str(normalized_path))
-        self.input_edit.blockSignals(False)
+        self.current_path = str(normalized_path)
         self._load_pdf(str(pdf_path))
                 
     def _finish_folder_processing(self):
         from PySide6.QtWidgets import QDialog, QPushButton, QVBoxLayout, QPlainTextEdit, QHBoxLayout
 
-        folder_path = self.input_edit.text().strip()
+        folder_path = self.current_path.strip()
         if not folder_path or not Path(folder_path).exists():
             self._reset_state()
             QMessageBox.information(self, "Готово", "Все PDF обработаны")
@@ -779,13 +763,8 @@ class Ocr_fPage(QWidget):
                 self._finish_folder_processing()
                 
     def _reset_state(self):
-        # Создаём новую сессию
         self.session = OCRSession()
-        
-        self.input_edit.blockSignals(True)
-        self.input_edit.clear()
-        self.input_edit.blockSignals(False)
-
+        self.current_path = ""
         self.filename_edit.clear()
 
         if hasattr(self.viewer, "close_document"):
@@ -795,19 +774,15 @@ class Ocr_fPage(QWidget):
                 pass
 
         self.viewer.clear_selection()
-
         self.result_text.clear()
-
         self.ocr_info.setText("Выделено областей: 0")
 
         self.page_spin.blockSignals(True)
         self.page_spin.setMaximum(1)
         self.page_spin.setValue(1)
         self.page_spin.blockSignals(False)
-
         self.page_info.setText("Страница 1 из 1")
 
         self.prev_btn.setEnabled(False)
         self.next_btn.setEnabled(False)
-
         self.ocr_button.setEnabled(False)

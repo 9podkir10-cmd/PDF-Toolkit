@@ -186,7 +186,7 @@ class ScanPage(QWidget):
         right_layout.setSpacing(5)
 
         try:
-            from gui.widgets.thumbnail_viewer import BatchPreviewWidget
+            from gui.widgets.viewer_for_scan import BatchPreviewWidget
             self.preview_widget = BatchPreviewWidget()
             right_layout.addWidget(self.preview_widget)
         except ImportError as e:

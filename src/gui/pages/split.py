@@ -12,7 +12,6 @@ from PySide6.QtCore import Qt, Signal, QObject, QThread
 from PySide6.QtWidgets import (
     QWidget,
     QLabel,
-    QMenu,
     QPushButton,
     QLineEdit,
     QPlainTextEdit,
@@ -131,6 +130,7 @@ class SplitPage(QWidget):
     def __init__(self):
         super().__init__()
         self.worker_thread = None
+        self.current_path = ""
         self._build_ui()
         self._connect_signals()
 
@@ -146,18 +146,6 @@ class SplitPage(QWidget):
 
         form = QFormLayout()
         form.setSpacing(15)
-
-        self.input_edit = QLineEdit()
-        self.input_button = QPushButton("Browse")
-        menu = QMenu(self)
-        menu.addAction("PDF File", self._browse_file)
-        menu.addAction("Folder", self._browse_folder)
-        self.input_button.setMenu(menu)
-
-        input_layout = QHBoxLayout()
-        input_layout.addWidget(self.input_edit)
-        input_layout.addWidget(self.input_button)
-        form.addRow("Input:", input_layout)
 
         self.output_edit = QLineEdit()
         self.output_button = QPushButton("Browse")
@@ -228,17 +216,11 @@ class SplitPage(QWidget):
     def _log_progress(self, value: int):
         self._log(f"Progress: {value}%")
 
-    def _browse_file(self):
-        filename, _ = QFileDialog.getOpenFileName(
-            self, "Select PDF", "", "PDF Files (*.pdf)"
-        )
-        if filename:
-            self.input_edit.setText(filename)
+    def open_file(self, file_path: str):
+        self.current_path = file_path
 
-    def _browse_folder(self):
-        directory = QFileDialog.getExistingDirectory(self, "Select Folder")
-        if directory:
-            self.input_edit.setText(directory)
+    def open_folder(self, folder_path: str):
+        self.current_path = folder_path
 
     def _browse_output(self):
         directory = QFileDialog.getExistingDirectory(self, "Select Output Folder")
@@ -265,7 +247,7 @@ class SplitPage(QWidget):
             QMessageBox.information(self, "Busy", "Processing is already running.")
             return
 
-        input_path = self.input_edit.text().strip()
+        input_path = self.current_path.strip()
         output_path = self.output_edit.text().strip()
         mode = self.mode_box.currentText()
         value = self.value_spin.value()

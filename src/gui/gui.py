@@ -7,18 +7,33 @@ def get_resource_path(relative_path):
     try:
         base_path = sys._MEIPASS
     except AttributeError:
-        base_path = os.path.abspath(".")
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        base_path = os.path.abspath(os.path.join(current_dir, ".."))
+        
     return os.path.join(base_path, relative_path)
+
+def load_stylesheet(app, filename):
+    style_path = get_resource_path(filename)
+    try:
+        with open(style_path, "r", encoding="utf-8") as f:
+            app.setStyleSheet(f.read())
+    except FileNotFoundError:
+        print(f"⚠️ Предупреждение: Файл стилей не найден по пути {style_path}")
 
 def run_gui() -> None:
     app_id = "9podkir10-cmd.PDF-Toolkit"
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
 
-    app = QApplication(sys.argv)
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+        
     app.setApplicationName("PDF-Toolkit")
     app.setOrganizationName("PDF-Toolkit")
 
-    icon_path = get_resource_path("icon.ico")
+    load_stylesheet(app, "assets/styles/style.qss")
+    icon_path = get_resource_path("assets/icon.ico")
+    
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
     else:
@@ -26,5 +41,4 @@ def run_gui() -> None:
 
     window = MainWindow()
     window.showMaximized()
-
-    sys.exit(app.exec())
+    app.exec()
