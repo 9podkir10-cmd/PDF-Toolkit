@@ -1,5 +1,6 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
+from backend.constants import SCAN_DPI
 
 class Template(BaseModel):
     name: str = Field(..., description="Название шаблона (отображается в интерфейсе)")
@@ -8,7 +9,7 @@ class Template(BaseModel):
 
 class ScanProfile(BaseModel):
     name: str = Field(..., description="Название профиля: Light / Dark / High Quality")
-    dpi: int = Field(300, ge=50, le=1200, description="Разрешение сканирования в точках на дюйм")
+    scan_dpi: int = Field(SCAN_DPI, ge=50, le=1200, description="Разрешение сканирования в точках на дюйм")
     color_mode: str = Field("color", description="Цветовой режим: color / gray / bw")
     page_size: str = Field("A4", description="Размер страницы: A4, A5, Letter, Legal")
     file_format: str = Field("pdf", description="Формат выходного файла: pdf / jpeg / png")
@@ -68,7 +69,7 @@ class Config(BaseModel):
                     "scan_profiles": [
                         {
                             "name": "Light",
-                            "dpi": 300,
+                            "scan_dpi": SCAN_DPI,
                             "color_mode": "color",
                             "page_size": "A4",
                             "file_format": "pdf",

@@ -1,16 +1,16 @@
 from pathlib import Path
 from PySide6.QtGui import QShortcut, QKeySequence
-from PySide6.QtCore import Qt, QThread
-from PySide6.QtWidgets import (QWidget, QLabel, QMenu, QPushButton, QLineEdit,
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtWidgets import (QWidget, QLabel, QPushButton,    QLineEdit,
     QVBoxLayout, QHBoxLayout, QMessageBox, QCheckBox,
-    QFileDialog, QSpinBox, QPlainTextEdit, QComboBox)
+    QPlainTextEdit, QComboBox)
 from backend.manifest import get_manifest_service
 from backend.manifest.utils import find_manifest
 from backend.services.queue_service import PDFQueueService
 from backend.services.file_workflow import PDFFileWorkflow
 from backend.services.ocr_workflow import OCRWorkflow
 from backend.services.template_service import FilenameTemplateService
-from gui.widgets.viewer_for_index import PDFViewer
+from gui.widgets.viewer_for_index import IndexViewer
 from gui.widgets.models import OCRSession
 from gui.workers.ocr_worker import OCRWorker
 from gui.signals import app_signals
@@ -19,8 +19,11 @@ from backend.services.box_to_img import PDFExtractor, Region
 from backend.services.ocr_b import OCRBackend
 from backend.clear_path import DirectoryNormalizer
 from backend.config import get_config_service
+from backend.constants import OCR_DPI
 
 class Ocr_fPage(QWidget):
+    path_changed = Signal(str)
+    
     def __init__(self):
         super().__init__()
         self.current_path = ""
@@ -64,13 +67,11 @@ class Ocr_fPage(QWidget):
 
         # Левая панель - PDF Viewer
         left_panel = QVBoxLayout()
-        self.viewer = PDFViewer()
+        self.viewer = IndexViewer()
         self.viewer.rect_selected.connect(self._on_rect_selected)
         left_panel.addWidget(self.viewer)
         content_layout.addLayout(left_panel, 3)
-        self.viewer.forward_requested.connect(self._go_forward)
-        self.viewer.backward_requested.connect(self._go_backward)
-
+        
         # Правая панель
         right_panel = QVBoxLayout()
         right_panel.addSpacing(10)
@@ -93,29 +94,6 @@ class Ocr_fPage(QWidget):
         self.clear_button.setMinimumHeight(40)
         right_panel.addWidget(self.clear_button)
         right_panel.addSpacing(20)
-
-        # ---- Navigation panel ----
-        right_panel.addWidget(QLabel("Navigation"))
-        nav_layout = QHBoxLayout()
-        self.prev_btn = QPushButton("◀")
-        self.prev_btn.setEnabled(False)
-        nav_layout.addWidget(self.prev_btn)
-
-        self.page_spin = QSpinBox()
-        self.page_spin.setMinimum(1)
-        self.page_spin.setMaximum(1)
-        self.page_spin.setButtonSymbols(QSpinBox.NoButtons)
-        nav_layout.addWidget(self.page_spin)
-
-        self.next_btn = QPushButton("▶")
-        self.next_btn.setEnabled(False)
-        nav_layout.addWidget(self.next_btn)
-        right_panel.addLayout(nav_layout)
-
-        self.page_info = QLabel("Страница 1 из 1")
-        self.page_info.setAlignment(Qt.AlignCenter)
-        right_panel.addWidget(self.page_info)
-        right_panel.addSpacing(15)
 
         # ---- результат распознавания ----
         self.ocr_info = QLabel("Выделено областей: 0")
@@ -151,10 +129,8 @@ class Ocr_fPage(QWidget):
     def _connect_signals(self):
         self.ocr_button.clicked.connect(self._run_ocr)
         self.clear_button.clicked.connect(self._undo_selection)
-        self.prev_btn.clicked.connect(self._prev_page)
-        self.next_btn.clicked.connect(self._next_page)
+        self.viewer.view.page_changed.connect(self._update_view_rects)
         self.viewer.lock_toggled.connect(self._on_lock_toggled)     
-        self.page_spin.valueChanged.connect(self._change_page)
         self.apply_btn.clicked.connect(self._apply_action)
         self.apply_shortcut = QShortcut(QKeySequence("Return"), self)
         self.apply_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
@@ -221,6 +197,7 @@ class Ocr_fPage(QWidget):
             return
 
         self.current_path = str(normalized_path)
+        self.path_changed.emit(str(normalized_path))
         self._load_pdf(str(pdf_path))
                 
     def _finish_folder_processing(self):
@@ -319,26 +296,9 @@ class Ocr_fPage(QWidget):
         self.result_text.clear()
         self.filename_edit.setText(Path(pdf_path).stem)
 
-        total_pages = self.viewer.get_total_pages()
-        self.page_spin.setMaximum(total_pages if total_pages else 1)
-        self.page_spin.setValue(1)
-        self.prev_btn.setEnabled(False)
-        self.next_btn.setEnabled(total_pages > 1)
-        self.page_info.setText(f"Страница 1 из {total_pages}")
         self.ocr_button.setEnabled(False)
         self._update_view_rects()
         self.result_text.setPlainText(f"PDF загружен:\n{pdf_path}")
-
-        if self.session.input_mode == "folder" and self.session.queue_ids:
-            current = self.session.current_index + 1
-            total = len(self.session.queue_ids)
-            self.viewer.update_counter(current, total)
-            self.viewer.btn_back.setEnabled(self.session.current_index > 0)
-            self.viewer.btn_forward.setEnabled(self.session.current_index < total - 1)
-        else:
-            self.viewer.update_counter(0, 0)
-            self.viewer.btn_back.setEnabled(False)
-            self.viewer.btn_forward.setEnabled(False)
 
         if self.session.locked and self.session.locked_rects:
             self.session.zones.clear()
@@ -438,88 +398,6 @@ class Ocr_fPage(QWidget):
 
             self._load_pdf(str(pdf_path))
 
-    def _change_page(self, page_num: int):
-        if hasattr(self, '_changing_page') and self._changing_page:
-            return
-        self._changing_page = True
-        try:
-            self.viewer.go_to_page(page_num - 1)
-            total_pages = self.page_spin.maximum()
-            self.prev_btn.setEnabled(page_num > 1)
-            self.next_btn.setEnabled(page_num < total_pages)
-            self.page_info.setText(f"Страница {page_num} из {total_pages}")
-            self._update_view_rects()
-        finally:
-            self._changing_page = False
-
-    def _prev_page(self):
-        current = self.page_spin.value()
-        if current > 1:
-            self.page_spin.setValue(current - 1)
-
-    def _next_page(self):
-        current = self.page_spin.value()
-        if current < self.page_spin.maximum():
-            self.page_spin.setValue(current + 1)
-
-    def _go_forward(self):
-        if self.session.input_mode != "folder":
-            return
-        if not self.session.queue_ids:
-            return
-        if self.session.current_index + 1 >= len(self.session.queue_ids):
-            return
-
-        self.session.current_index += 1
-        next_id = self.session.queue_ids[self.session.current_index]
-        self.session.record_id = next_id
-
-        service = get_manifest_service(self.session.manifest_path)
-        manifest = service.load()
-        if manifest is None:
-            QMessageBox.critical(self, "Ошибка", "Не удалось загрузить манифест")
-            return
-        record = service.get_record(next_id)
-        if record is None:
-            QMessageBox.critical(self, "Ошибка", f"Запись с ID {next_id} не найдена.")
-            return
-
-        pdf_path = Path(self.session.manifest_path).parent / record.filename
-        if not pdf_path.exists():
-            QMessageBox.critical(self, "Ошибка", f"Файл не найден: {pdf_path}")
-            return
-
-        self._load_pdf(str(pdf_path))
-
-    def _go_backward(self):
-        if self.session.input_mode != "folder":
-            return
-        if not self.session.queue_ids:
-            return
-        if self.session.current_index - 1 < 0:
-            return
-
-        self.session.current_index -= 1
-        prev_id = self.session.queue_ids[self.session.current_index]
-        self.session.record_id = prev_id
-
-        service = get_manifest_service(self.session.manifest_path)
-        manifest = service.load()
-        if manifest is None:
-            QMessageBox.critical(self, "Ошибка", "Не удалось загрузить манифест")
-            return
-        record = service.get_record(prev_id)
-        if record is None:
-            QMessageBox.critical(self, "Ошибка", f"Запись с ID {prev_id} не найдена.")
-            return
-
-        pdf_path = Path(self.session.manifest_path).parent / record.filename
-        if not pdf_path.exists():
-            QMessageBox.critical(self, "Ошибка", f"Файл не найден: {pdf_path}")
-            return
-
-        self._load_pdf(str(pdf_path))
-
     # ---------- от зависаний ----------
     def _set_ocr_running(self, running):
         self._ocr_running = running
@@ -587,20 +465,20 @@ class Ocr_fPage(QWidget):
             self.session.locked_rects = self.session.zones.copy()
         else:
             self.session.locked_rects = []
-            self._clear_selection()
-
+            self.viewer.setFocus()
+            
     def _update_view_rects(self):
         if not hasattr(self, 'viewer') or not self.viewer:
             return
+            
         current_page = self.viewer.current_page()
-        dpi = self.viewer.get_dpi()
-        scale = dpi / 72.0 
-        filtered = [
-            (r.x * scale, r.y * scale, r.w * scale, r.h * scale)
-            for r in self.session.zones
+        
+        filtered_regions = [
+            r for r in self.session.zones
             if r.page == current_page + 1
         ]
-        self.viewer.set_rects(filtered)
+        
+        self.viewer.set_rects(filtered_regions)
 
     def _refresh_result_text(self):
         self.result_text.clear()
@@ -642,7 +520,7 @@ class Ocr_fPage(QWidget):
             self.ocr_workflow,
             self.session.pdf_path,
             self.session.zones,
-            dpi=300
+            dpi=OCR_DPI
         )
         self._ocr_worker.moveToThread(self._ocr_thread)
 
@@ -776,13 +654,4 @@ class Ocr_fPage(QWidget):
         self.viewer.clear_selection()
         self.result_text.clear()
         self.ocr_info.setText("Выделено областей: 0")
-
-        self.page_spin.blockSignals(True)
-        self.page_spin.setMaximum(1)
-        self.page_spin.setValue(1)
-        self.page_spin.blockSignals(False)
-        self.page_info.setText("Страница 1 из 1")
-
-        self.prev_btn.setEnabled(False)
-        self.next_btn.setEnabled(False)
         self.ocr_button.setEnabled(False)

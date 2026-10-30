@@ -50,7 +50,7 @@ class ScanRequest(BaseModel):
     split_by_count: Optional[int] = Field(None, ge=1)
     show_driver_ui: bool = Field(True, description="Показывать ли UI драйвера (Avision)")
 
-    dpi: Optional[int] = None
+    scan_dpi: Optional[int] = None
     color_mode: Optional[str] = None        # "color" / "gray" / "bw"
     page_size: Optional[str] = None         # "A4", "A5", "Letter", "Legal"
     brightness: Optional[int] = None

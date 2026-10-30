@@ -1,11 +1,12 @@
 from PySide6.QtCore import QObject, Signal, Slot
+from backend.constants import OCR_DPI
 
 class OCRWorker(QObject):
     finished = Signal(object)
     error = Signal(str)
     progress = Signal(int)
 
-    def __init__(self, ocr_workflow, pdf_path, regions, dpi=300):
+    def __init__(self, ocr_workflow, pdf_path, regions, dpi=OCR_DPI):
         super().__init__()
         self.ocr_workflow = ocr_workflow
         self.pdf_path = pdf_path

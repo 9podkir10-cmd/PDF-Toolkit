@@ -30,6 +30,8 @@ class MainWindow(QMainWindow):
         self.title_bar.open_file_requested.connect(self._open_file_dialog)
         self.title_bar.open_folder_requested.connect(self._open_folder_dialog)
         self.title_bar.path_submitted.connect(self._handle_global_path)
+        self.secondary_sidebar.file_double_clicked.connect(self._handle_global_path)
+        self.index_page.path_changed.connect(self._update_ui_path)
 
     def _build_ui(self):
         central = QWidget()
@@ -152,6 +154,11 @@ class MainWindow(QMainWindow):
                 handle.setEnabled(False) 
                 handle.setCursor(Qt.ArrowCursor)
             self.splitter.setSizes([0, self.splitter.width()])
+
+    def _update_ui_path(self, path: str):
+        self.current_path = path
+        self.title_bar.set_path(path)
+        self.secondary_sidebar.set_root_path(path)
 
     def _switch_page(self, index: int):
         self.stack.setCurrentIndex(index)

@@ -1,9 +1,7 @@
 import os
-from PySide6.QtCore import QDir, Qt
-from PySide6.QtWidgets import (
-    QStackedWidget, QWidget, QVBoxLayout, QTreeView, 
-    QFileSystemModel, QLabel, QHBoxLayout
-)
+from PySide6.QtCore import QDir, Qt, Signal
+from PySide6.QtWidgets import (QStackedWidget, QWidget, QVBoxLayout, QTreeView, QFileSystemModel, QLabel, QHBoxLayout)
+from backend.explorer import ExplorerWidget
 
 
 class FileExplorerWidget(QWidget):
@@ -72,8 +70,9 @@ class FileExplorerWidget(QWidget):
         self.stacked_widget.setCurrentWidget(self.tree)
 
 
-# Класс SecondarySidebar остается без изменений
 class SecondarySidebar(QStackedWidget):
+    file_double_clicked = Signal(str) 
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("secondarySidebar")
@@ -83,9 +82,11 @@ class SecondarySidebar(QStackedWidget):
 
     def _build_pages(self):
         for _ in range(4):
-            explorer = FileExplorerWidget()
+            explorer = ExplorerWidget()
+            explorer.file_double_clicked.connect(self.file_double_clicked.emit)
             self.addWidget(explorer)
             self.explorers.append(explorer)
+
 
         for _ in range(3):
             self.addWidget(QWidget())

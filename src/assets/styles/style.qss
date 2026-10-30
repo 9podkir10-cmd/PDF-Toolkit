@@ -1,18 +1,30 @@
+/* =========================================================
+   1. ГЛОБАЛЬНЫЕ СТИЛИ И ПОДСКАЗКИ
+   ========================================================= */
 QToolTip {
-    background-color: #2b2b2b; /* Темный фон, как у вашей панели */
-    color: #ffffff;            /* Белый текст */
-    border: 1px solid #555555; /* Тонкая рамка, чтобы сливалось с темой */
+    background-color: #2b2b2b;
+    color: #ffffff;
+    border: 1px solid #555555;
     padding: 4px 8px;
     border-radius: 4px;
     font-size: 12px;
 }
 
+/* =========================================================
+   2. ОСНОВНЫЕ КОНТЕЙНЕРЫ И САЙДБАРЫ
+   ========================================================= */
+/* Основной контент */
+#mainContent {
+    background-color: #1e1e1e;
+}
 
+/* Первый сайдбар (с иконками) */
+#sidebar {
+    background-color: #181818;
+    border-right: 1px solid #333333; 
+}
 
-
-
-
-/* Sidebar */
+/* Кнопки первого сайдбара */
 #sidebar QPushButton {
     border: none;
     background-color: transparent;
@@ -31,45 +43,24 @@ QToolTip {
     background-color: #1e3a8a;
 }
 
-/* --- Сайдбары --- */
-
-/* Первый сайдбар (с иконками) */
-#sidebar {
-    background-color: #181818;
-    /* Внутренняя граница между 1 и 2 сайдбаром */
-    border-right: 1px solid #333333; 
-}
-
 /* Второй сайдбар (с контентом) */
 #secondarySidebar {
     background-color: #181818;
-    /* Убираем правую границу, так как её будет рисовать QSplitter */
     border: none; 
 }
 
-/* Основной контент */
-#mainContent {
-    background-color: #1e1e1e;
-}
-
-/* --- Линия-разделитель (ручка QSplitter) --- */
+/* Линия-разделитель (ручка QSplitter) */
 QSplitter::handle:horizontal {
-    background-color: #333333; /* Цвет полоски */
+    background-color: #333333;
 }
 
-/* Эффект при наведении на полоску (чтобы было понятно, что её можно тянуть) */
 QSplitter::handle:horizontal:hover {
     background-color: #555555; 
 }
 
-
-
-
-
-
-
-
-/* TitleBar */
+/* =========================================================
+   3. TITLE BAR (ВЕРХНЯЯ ПАНЕЛЬ ОКНА)
+   ========================================================= */
 #customTitleBar QPushButton {
     border: none;
     background-color: transparent;
@@ -92,7 +83,7 @@ QSplitter::handle:horizontal:hover {
     background-color: #c50f1f;
 }
 
-
+/* Строка пути в TitleBar */
 QLineEdit#pathEdit {
     background-color: #1e1e1e;
     color: #cccccc;
@@ -103,20 +94,16 @@ QLineEdit#pathEdit {
 }
 
 QLineEdit#pathEdit:focus {
-    border: 1px solid #007acc; /* Синяя рамка при фокусе, как в VS Code */
+    border: 1px solid #007acc;
     background-color: #252526;
 }
 
-
-
-
-
-
-
-/* --- Заголовок Explorer --- */
+/* =========================================================
+   4. EXPLORER (ДЕРЕВО ФАЙЛОВ)
+   ========================================================= */
 #explorerHeader {
     background-color: #181818;
-    border-bottom: 1px solid #2b2b2b; /* Тонкая линия под заголовком */
+    border-bottom: 1px solid #2b2b2b;
 }
 
 #explorerTitle {
@@ -127,18 +114,16 @@ QLineEdit#pathEdit:focus {
     letter-spacing: 1px;
 }
 
-/* --- Дерево файлов --- */
 #fileExplorer {
     background-color: #181818;
 }
 
-/* ОСТАВЬТЕ ЭТО В style.qss */
 QTreeView {
     background-color: #181818;
     color: #cccccc;
     border: none;
     outline: 0;
-    show-decoration-selected: 0; /* Убирает желтую/серую полоску */
+    show-decoration-selected: 0; /* Убирает лишние полоски выделения */
 }
 
 QTreeView::item {
@@ -155,7 +140,74 @@ QTreeView::item:selected {
     color: #ffffff;
 }
 
-/* Прозрачный фон для веток, чтобы не было артефактов */
 QTreeView::branch {
     background: transparent;
+}
+
+/* =========================================================
+   5. PDF VIEWER TOOLBAR (ПАНЕЛЬ ИНСТРУМЕНТОВ PDF)
+   ========================================================= */
+#pdfTopToolbar {
+    background-color: #1e1e1e;
+    border-bottom: 1px solid #333333;
+}
+
+#pdfTopToolbar QLabel {
+    color: #cccccc;
+    font-size: 12px;
+}
+
+/* Кнопки с иконками (стрелки, плюс, минус, рука, курсор) */
+#pdfTopToolbar QPushButton {
+    border: none;
+    background-color: transparent;
+    border-radius: 4px;
+}
+
+#pdfTopToolbar QPushButton:hover {
+    background-color: #333333;
+}
+
+/* Состояние "нажато" для режимов (Рука, Курсор, Замок) */
+#pdfTopToolbar QPushButton:checked {
+    background-color: #37373d;
+    color: #ffffff;
+}
+
+/* Спинбокс (номер страницы) */
+#pdfTopToolbar QSpinBox {
+    background-color: #2d2d2d;
+    color: #cccccc;
+    border: 1px solid transparent;
+    border-radius: 4px;
+}
+
+#pdfTopToolbar QSpinBox:focus {
+    border: 1px solid #007acc;
+}
+
+/* Комбобокс (зум) */
+#pdfTopToolbar QComboBox {
+    background-color: #2d2d2d;
+    color: #cccccc;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding-left: 6px;
+}
+
+#pdfTopToolbar QComboBox:hover {
+    background-color: #3c3c3c;
+}
+
+#pdfTopToolbar QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+/* Выпадающий список зума */
+#pdfTopToolbar QComboBox QAbstractItemView {
+    background-color: #252526;
+    color: #cccccc;
+    selection-background-color: #04395e;
+    border: 1px solid #333333;
 }

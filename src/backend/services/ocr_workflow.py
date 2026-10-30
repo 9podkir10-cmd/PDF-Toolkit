@@ -4,6 +4,7 @@ from typing import List, Optional
 from backend.services.box_to_img import PDFExtractor, Region
 from backend.services.ocr_b import OCRBackend
 from backend.services.storage import Storage
+from backend.constants import OCR_DPI
 
 @dataclass
 class OCRZoneResult:
@@ -25,7 +26,7 @@ class OCRWorkflow:
         self,
         pdf_path: str,
         regions: List[Region],
-        dpi: int = 300,
+        dpi: int = OCR_DPI,
     ) -> List[OCRZoneResult]:
         """
         Выполняет OCR для каждой переданной зоны.

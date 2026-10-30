@@ -1,11 +1,25 @@
-from PySide6.QtCore import Qt, QRectF, Signal
-from PySide6.QtGui import QPixmap, QPainter, QAction, QKeySequence
-from PySide6.QtWidgets import (QWidget, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
-    QVBoxLayout, QHBoxLayout, QPushButton, QButtonGroup, QLabel)
+import os
+from PySide6.QtCore import Qt, QRectF, Signal, QSize
+from PySide6.QtGui import QPixmap, QPainter, QAction, QKeySequence, QIcon
+from PySide6.QtWidgets import (QWidget, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QFrame,
+    QVBoxLayout, QComboBox, QHBoxLayout, QSpinBox, QPushButton, QButtonGroup, QLabel)
 import pymupdf
+from backend.constants import RENDER_DPI
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+ICONS_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "..", "..", "assets", "icons"))
+ICON_LEFT = os.path.join(ICONS_DIR, "arrows/left_arrow.svg")
+ICON_RIGHT = os.path.join(ICONS_DIR, "arrows/right_arrow.svg")
+ICON_MINUS = os.path.join(ICONS_DIR, "BasePDFViewer/minus.svg")
+ICON_PLUS = os.path.join(ICONS_DIR, "BasePDFViewer/plus.svg")
+ICON_FIT = os.path.join(ICONS_DIR, "BasePDFViewer/page_fit.svg")
+ICON_HAND = os.path.join(ICONS_DIR, "BasePDFViewer/hand.svg")
+ICON_CURSOR = os.path.join(ICONS_DIR, "BasePDFViewer/cursor.svg")
+
 
 class BasePDFGraphicsView(QGraphicsView):
-    """Базовый вьювер для отображения PDF (без рисования)."""
+    page_changed = Signal(int, int) 
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.scene = QGraphicsScene(self)
@@ -13,17 +27,15 @@ class BasePDFGraphicsView(QGraphicsView):
         self.pixmap_item = QGraphicsPixmapItem()
         self.scene.addItem(self.pixmap_item)
 
-        self.setDragMode(QGraphicsView.NoDrag)
+        self.set_mode("hand")
         self.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
         self.setAlignment(Qt.AlignCenter)
 
         self.current_pixmap = None
-        self.dpi = 300
+        self.dpi = RENDER_DPI
         self.current_pdf_path = None
         self.current_page_num = 0
         self.doc = None
-
-        self.mode = "select"  # "select" or "hand"
 
     def load_pdf(self, pdf_path: str, page_num: int = 0):
         try:
@@ -45,6 +57,8 @@ class BasePDFGraphicsView(QGraphicsView):
                 self.setTransform(current_transform)
             else:
                 self.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
+            total = self.doc.page_count if self.doc else 0
+            self.page_changed.emit(page_num + 1, total) 
         except Exception as e:
             print(f"Error loading PDF: {e}")
             self.pixmap_item.setPixmap(QPixmap())
@@ -54,9 +68,6 @@ class BasePDFGraphicsView(QGraphicsView):
     def current_page(self):
         return self.current_page_num
     
-    def get_dpi(self):
-        return self.dpi
-
     def get_total_pages(self) -> int:
         return self.doc.page_count if self.doc else 0
 
@@ -83,68 +94,168 @@ class BasePDFGraphicsView(QGraphicsView):
 
 
 class BasePDFViewer(QWidget):
-    """Базовый виджет с тулбаром (навигация и переключение режимов)."""
-    forward_requested = Signal()
-    backward_requested = Signal()
-
-    def _create_view(self) -> BasePDFGraphicsView:
-        """Фабричный метод. Позволяет наследникам подменить View на свой."""
+    def _create_view(self):
         return BasePDFGraphicsView(self)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.view = self._create_view()
 
-        # Тулбар
-        self.toolbar = QHBoxLayout()
+        self._build_ui()
+        self._connect_signals()
+        self.setup_shortcuts()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.top_toolbar = QWidget()
+        self.top_toolbar.setObjectName("pdfTopToolbar")
+        toolbar_layout = QHBoxLayout(self.top_toolbar)
+        toolbar_layout.setContentsMargins(15, 5, 15, 5)
+        toolbar_layout.setSpacing(8)
+
+        self.btn_prev_page = QPushButton()
+        self.btn_prev_page.setIcon(QIcon(ICON_LEFT))
+        self.btn_prev_page.setFixedSize(28, 28)
+
+        self.page_spin = QSpinBox()
+        self.page_spin.setButtonSymbols(QSpinBox.NoButtons)
+        self.page_spin.setFixedWidth(40)
+        self.page_spin.setAlignment(Qt.AlignCenter)
+
+        self.lbl_total_pages = QLabel("/ 0")
+        self.lbl_total_pages.setAlignment(Qt.AlignCenter)
+        self.lbl_total_pages.setFixedWidth(30)
+
+        self.btn_next_page = QPushButton()
+        self.btn_next_page.setIcon(QIcon(ICON_RIGHT))
+        self.btn_next_page.setFixedSize(28, 28)
+
+        toolbar_layout.addWidget(self.btn_prev_page)
+        toolbar_layout.addWidget(self.page_spin)
+        toolbar_layout.addWidget(self.lbl_total_pages)
+        toolbar_layout.addWidget(self.btn_next_page)
+
+        toolbar_layout.addStretch(1)
+
+        self.btn_zoom_out = QPushButton()
+        self.btn_zoom_out.setIcon(QIcon(ICON_MINUS))
+        self.btn_zoom_out.setFixedSize(28, 28)
         
-        self.btn_hand = QPushButton("move")
-        self.btn_hand.setToolTip("H")
-        self.btn_select = QPushButton("pick")
-        self.btn_select.setToolTip("V")
+        self.zoom_combo = QComboBox()
+        self.zoom_combo.setFixedWidth(80)
+        self.zoom_combo.addItems(["50%", "75%", "100%", "125%", "150%", "Fit Page"])
+        self.zoom_combo.setCurrentText("Fit Page")
+
+        self.btn_zoom_in = QPushButton()
+        self.btn_zoom_in.setIcon(QIcon(ICON_PLUS))
+        self.btn_zoom_in.setFixedSize(28, 28)
         
+        self.btn_fit_page = QPushButton()
+        self.btn_fit_page.setIcon(QIcon(ICON_FIT))
+        self.btn_fit_page.setFixedSize(28, 28)
+        self.btn_fit_page.setToolTip("Fit to Page")
+
+        toolbar_layout.addWidget(self.btn_zoom_out)
+        toolbar_layout.addWidget(self.zoom_combo)
+        toolbar_layout.addWidget(self.btn_zoom_in)
+        toolbar_layout.addWidget(self.btn_fit_page)
+
+        toolbar_layout.addStretch(1)
+
+        self.btn_hand = QPushButton()
+        self.btn_hand.setIcon(QIcon(ICON_HAND))
+        self.btn_hand.setFixedSize(28, 28)
         self.btn_hand.setCheckable(True)
+        self.btn_hand.setChecked(True)
+        
+        self.btn_select = QPushButton()
+        self.btn_select.setIcon(QIcon(ICON_CURSOR))
+        self.btn_select.setFixedSize(28, 28)
         self.btn_select.setCheckable(True)
-        self.btn_select.setChecked(True)
 
         self.btn_group = QButtonGroup(self)
         self.btn_group.addButton(self.btn_hand, 0)
         self.btn_group.addButton(self.btn_select, 1)
+        
+        toolbar_layout.addWidget(self.btn_hand)
+        toolbar_layout.addWidget(self.btn_select)
+
+        self.custom_tools_layout = QHBoxLayout()
+        self.custom_tools_layout.setContentsMargins(0, 0, 0, 0)
+        toolbar_layout.addLayout(self.custom_tools_layout)
+
+        layout.addWidget(self.top_toolbar)
+        layout.addWidget(self.view, 1)
+
+    def _connect_signals(self):
+        self.btn_prev_page.clicked.connect(self._prev_page)
+        self.btn_next_page.clicked.connect(self._next_page)
+        self.page_spin.valueChanged.connect(self._page_changed)
+        
+        self.btn_zoom_in.clicked.connect(self._zoom_in)
+        self.btn_zoom_out.clicked.connect(self._zoom_out)
+        self.btn_fit_page.clicked.connect(self._fit_page)
+        self.zoom_combo.currentTextChanged.connect(self._zoom_combo_changed)
+        
         self.btn_group.idClicked.connect(self._on_mode_changed)
-
-        self.btn_back = QPushButton("Назад")
-        self.btn_back.setToolTip("Ctrl+Left")
         
-        self.counter_label = QLabel("—")
-        self.counter_label.setAlignment(Qt.AlignCenter)
-        self.counter_label.setMinimumWidth(60)
-        self.counter_label.setStyleSheet("font-size: 12px; font-weight: bold;")
-                
-        self.btn_forward = QPushButton("Вперёд")
-        self.btn_forward.setToolTip("Ctrl+Right")
+        self.view.page_changed.connect(self._on_view_page_changed)
 
-        self.toolbar.addWidget(self.btn_hand)
-        self.toolbar.addWidget(self.btn_select)
+    # --- навигация по страницам ---
+    def _prev_page(self):
+        current = self.view.current_page()
+        if current > 0:
+            self.view.go_to_page(current - 1)
+
+    def _next_page(self):
+        current = self.view.current_page()
+        total = self.view.get_total_pages()
+        if current < total - 1:
+            self.view.go_to_page(current + 1)
+
+    def _page_changed(self, value):
+        self.view.go_to_page(value - 1)
+
+    def _on_view_page_changed(self, current: int, total: int):
+        self.page_spin.blockSignals(True)
+        self.page_spin.setMaximum(total if total > 0 else 1)
+        self.page_spin.setValue(current)
+        self.page_spin.blockSignals(False)
         
-        self.toolbar.addStretch()
+        self.lbl_total_pages.setText(f"/ {total}")
+        self.btn_prev_page.setEnabled(current > 1)
+        self.btn_next_page.setEnabled(current < total)
 
-        self.toolbar.addWidget(self.btn_back)
-        self.toolbar.addWidget(self.counter_label)
-        self.toolbar.addWidget(self.btn_forward)
+    # --- зум ---
+    def _zoom_in(self):
+        self.view.scale(1.25, 1.25)
+        self.zoom_combo.setCurrentText("Custom")
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.addWidget(self.view)
-        layout.addLayout(self.toolbar)
-        self.setLayout(layout)
+    def _zoom_out(self):
+        self.view.scale(0.8, 0.8)
+        self.zoom_combo.setCurrentText("Custom")
 
-        self.view.set_mode("select")
-        self.setup_shortcuts()
-        
-        self.btn_back.clicked.connect(self._on_backward_clicked)
-        self.btn_forward.clicked.connect(self._on_forward_clicked)
+    def _fit_page(self):
+        self.view.fitInView(self.view.scene.sceneRect(), Qt.KeepAspectRatio)
+        self.zoom_combo.setCurrentText("Fit Page")
 
+    def _zoom_combo_changed(self, text):
+        if text == "Fit Page":
+            self._fit_page()
+        elif text == "Custom":
+            pass
+        else:
+            try:
+                factor = int(text.replace("%", "")) / 100.0
+                self.view.resetTransform()
+                self.view.scale(factor, factor)
+            except ValueError:
+                pass
+
+    # --- Режимы ---
     def _on_mode_changed(self, button_id: int):
         if button_id == 0:
             self.view.set_mode("hand")
@@ -164,33 +275,9 @@ class BasePDFViewer(QWidget):
         action_select.setShortcut(QKeySequence("V"))
         action_select.setShortcutContext(context)
         action_select.triggered.connect(self.btn_select.click)
-        self.addAction(action_select)
+        self.addAction(action_select)    
 
-        action_back = QAction(self)
-        action_back.setShortcut(QKeySequence("Ctrl+Left"))
-        action_back.setShortcutContext(context)
-        action_back.triggered.connect(self.btn_back.click)
-        self.addAction(action_back)    
-        
-        action_forward = QAction(self)
-        action_forward.setShortcut(QKeySequence("Ctrl+Right"))
-        action_forward.setShortcutContext(context)
-        action_forward.triggered.connect(self.btn_forward.click)
-        self.addAction(action_forward)            
-
-    def _on_backward_clicked(self):
-        self.backward_requested.emit()
-
-    def _on_forward_clicked(self):
-        self.forward_requested.emit()  
-
-    # Прокси-методы
-    def update_counter(self, current: int, total: int):
-        if total == 0:
-            self.counter_label.setText("—")
-        else:
-            self.counter_label.setText(f"{current} / {total}")
-    
+    # --- Прокси-методы ---
     def load_pdf(self, pdf_path: str, page_num: int = 0):
         self.view.load_pdf(pdf_path, page_num)
 
@@ -202,12 +289,6 @@ class BasePDFViewer(QWidget):
 
     def close_document(self):
         self.view.close_document()
-
-    def wheelEvent(self, event):
-        self.view.wheelEvent(event)
-
-    def get_dpi(self):
-        return self.view.get_dpi()
 
     def current_page(self):
         return self.view.current_page()

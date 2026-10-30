@@ -51,7 +51,7 @@ class ScanWorker(QObject):
                 barcode_modes=self.barcode_modes,
                 split_by_count=self.split_by_count,
                 show_driver_ui=False,
-                dpi=self.profile.dpi if self.profile else None,
+                scan_dpi=self.profile.scan_dpi if self.profile else None,
                 color_mode=self.profile.color_mode if self.profile else None,
                 page_size=self.profile.page_size if self.profile else None,
                 brightness=self.profile.brightness if self.profile else None,

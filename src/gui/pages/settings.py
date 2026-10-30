@@ -7,6 +7,8 @@ from gui.signals import app_signals
 from backend.config import get_config_service
 from backend.config.models import Template, ScanProfile
 from backend.config.utils import lang_to_id, id_to_lang_string
+from backend.constants import SCAN_DPI
+
 
 
 class SettingsPage(QWidget):
@@ -329,7 +331,7 @@ class SettingsPage(QWidget):
 
         dpi_spin = QSpinBox()
         dpi_spin.setRange(50, 1200)
-        dpi_spin.setValue(300)
+        dpi_spin.setValue(SCAN_DPI)
         layout.addWidget(QLabel("Разрешение (DPI):"))
         layout.addWidget(dpi_spin)
 
@@ -365,7 +367,7 @@ class SettingsPage(QWidget):
 
         if initial_profile:
             name_edit.setText(initial_profile.get("name", ""))
-            dpi_spin.setValue(initial_profile.get("dpi", 300))
+            dpi_spin.setValue(initial_profile.get("scan_dpi", SCAN_DPI))
             color_map = {"color": 0, "gray": 1, "bw": 2}
             color_combo.setCurrentIndex(color_map.get(initial_profile.get("color_mode", "color"), 0))
             size_combo.setCurrentText(initial_profile.get("page_size", "A4"))
@@ -395,7 +397,7 @@ class SettingsPage(QWidget):
 
             return {
                 "name": name,
-                "dpi": dpi_spin.value(),
+                "scan_dpi": dpi_spin.value(),
                 "color_mode": color_mode,
                 "page_size": size_combo.currentText(),
                 "file_format": format_combo.currentText().lower(),

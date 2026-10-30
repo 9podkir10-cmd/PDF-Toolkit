@@ -4,6 +4,7 @@ from backend.config import get_config_service
 from backend.services.box_to_img import PDFExtractor, Region
 from backend.services.ocr_b import OCRBackend
 from backend.services.storage import Storage
+from backend.constants import OCR_DPI
 
 
 class OCRService:
@@ -34,7 +35,7 @@ class OCRService:
         images = self.extractor.crop_regions(
             pdf_path=file_path,
             regions=pdf_regions,
-            dpi=300
+            dpi=OCR_DPI
         )
 
         texts = self.ocr.recognize_batch(images)

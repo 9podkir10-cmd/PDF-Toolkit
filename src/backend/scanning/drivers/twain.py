@@ -53,9 +53,9 @@ class TwainScanner(BaseScanner):
                 print(f"[TwainScanner] Не удалось установить {cap}: {e}")
 
         # Разрешение
-        if request.dpi:
-            _set(twain.ICAP_XRESOLUTION, twain.TWTY_FIX32, float(request.dpi))
-            _set(twain.ICAP_YRESOLUTION, twain.TWTY_FIX32, float(request.dpi))
+        if request.scan_dpi:
+            _set(twain.ICAP_XRESOLUTION, twain.TWTY_FIX32, float(request.scan_dpi))
+            _set(twain.ICAP_YRESOLUTION, twain.TWTY_FIX32, float(request.scan_dpi))
 
         # Цветовой режим
         if request.color_mode:
