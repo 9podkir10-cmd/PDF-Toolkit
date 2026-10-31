@@ -1,7 +1,7 @@
 from pathlib import Path
-from typing import Optional
 
-def find_manifest(pdf_path: Path) -> Optional[Path]:
+
+def find_manifest(pdf_path: Path) -> Path | None:
     """
     Ищет manifest.json рядом с PDF или в соответствующей _hardlink папке.
     """

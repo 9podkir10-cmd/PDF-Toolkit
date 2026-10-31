@@ -1,14 +1,13 @@
-import pandas as pd
-from pathlib import Path
 from datetime import datetime
-from typing import List, Optional
+from pathlib import Path
+
+import pandas as pd
 import pymupdf
 
 
 def extract_metadata(pdf_path: Path, record_id: int = None) -> dict:
-    doc = pymupdf.open(pdf_path)
-    pages = len(doc)
-    doc.close()
+    with pymupdf.open(pdf_path) as doc:
+        pages = len(doc)
     
     stat = pdf_path.stat()
     return {
@@ -27,9 +26,9 @@ def extract_metadata(pdf_path: Path, record_id: int = None) -> dict:
 
 def scan_and_export(
     input_path: str,
-    output_path: Optional[str] = None,
+    output_path: str | None = None,
     format: str = 'excel',
-    columns: Optional[List[str]] = None
+    columns: list[str] | None = None
 ) -> None:
     input_path = Path(input_path)
     

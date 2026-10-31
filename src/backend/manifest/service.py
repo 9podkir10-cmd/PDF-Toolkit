@@ -1,13 +1,21 @@
 import datetime
-from typing import Optional
 from uuid import uuid4
-from .models import Manifest, FileRecord, DeduplicationInfo, Statistics, SourceConfig, OutputConfig
+
+from .models import (
+    DeduplicationInfo,
+    FileRecord,
+    Manifest,
+    OutputConfig,
+    SourceConfig,
+    Statistics,
+)
 from .repository import ManifestRepository
+
 
 class ManifestService:
     def __init__(self, repo: ManifestRepository):
         self._repo = repo
-        self._manifest: Optional[Manifest] = None
+        self._manifest: Manifest | None = None
 
     def load_or_create(self, source_dir: str, output_dir: str, total: int = 0) -> Manifest:
         if self._repo.exists():
@@ -29,8 +37,8 @@ class ManifestService:
         if self._manifest:
             self._repo.save(self._manifest)
 
-    def add_record(self, filename: str, original_path: str, size: int, stage: int, hash_value: Optional[str] = None,
-        is_duplicate: bool = False, links_to: Optional[str] = None) -> FileRecord:
+    def add_record(self, filename: str, original_path: str, size: int, stage: int, hash_value: str | None = None,
+        is_duplicate: bool = False, links_to: str | None = None) -> FileRecord:
 
         if self._manifest is None:
             raise RuntimeError("Manifest not loaded")
@@ -51,7 +59,7 @@ class ManifestService:
         self._update_stats()
         return record_id   
 
-    def get_record(self, record_id: str) -> Optional[FileRecord]:
+    def get_record(self, record_id: str) -> FileRecord | None:
         if self._manifest is None:
             return None
         return self._manifest.records.get(record_id)
@@ -98,7 +106,7 @@ class ManifestService:
         self._manifest.stats.duplicates = duplicates
         self._manifest.stats.total_size_bytes = total_size
         
-    def load(self) -> Optional[Manifest]:
+    def load(self) -> Manifest | None:
         try:
             self._manifest = self._repo.load()
             return self._manifest

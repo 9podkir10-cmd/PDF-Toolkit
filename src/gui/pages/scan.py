@@ -1,17 +1,30 @@
 import os
 from pathlib import Path
-from typing import Optional
-from PySide6.QtCore import Qt, Signal, QObject, QThread
-from PySide6.QtWidgets import (
-    QWidget, QLabel, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLineEdit, QPushButton, QComboBox, QCheckBox,
-    QListWidget, QListWidgetItem, QPlainTextEdit, QMessageBox,
-    QFileDialog, QProgressBar, QSpinBox, QGroupBox
-)
+
 from PIL import Image
-from backend.scanning import get_scan_service, ScanRequest
-from backend.scanning.models import Batch, Document, Page
+from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
+    QPlainTextEdit,
+    QProgressBar,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
+
 from backend.config import get_config_service
+from backend.scanning import ScanRequest, get_scan_service
+from backend.scanning.models import Batch, Document, Page
 
 
 class ScanWorker(QObject):
@@ -21,12 +34,12 @@ class ScanWorker(QObject):
 
     def __init__(
         self,
-        scanner_name: Optional[str],
+        scanner_name: str | None,
         output_folder: str,
         base_filename: str,
         split_by_barcode: bool,
         barcode_modes: list,
-        split_by_count: Optional[int] = None,
+        split_by_count: int | None = None,
         profile=None
     ):
         super().__init__()

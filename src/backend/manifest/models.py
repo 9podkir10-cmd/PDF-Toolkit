@@ -1,32 +1,34 @@
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import Any
 from uuid import uuid4
-from pydantic import BaseModel, Field, field_validator, ValidationInfo
+
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
+
 
 # для вложенных структур
 class DeduplicationInfo(BaseModel):
     stage: int = Field(default=0, ge=0, le=4, description="Этап обработки дедупликации (0-4)")
     is_duplicate: bool = Field(default=False, description="Является ли файл дубликатом")
-    links_to: Optional[str] = Field(default=None, description="ID оригинального файла, если это дубликат")
-    linked_files: List[str] = Field(default_factory=list, description="ID файлов-дубликатов, если это оригинал")
+    links_to: str | None = Field(default=None, description="ID оригинального файла, если это дубликат")
+    linked_files: list[str] = Field(default_factory=list, description="ID файлов-дубликатов, если это оригинал")
 
 class OcrInfo(BaseModel):
     status: str = Field(default="pending", description="Статус OCR: pending, completed, failed")
     is_recognized: bool = Field(default=False, description="Был ли текст успешно распознан")
-    used_template: Optional[str] = Field(default=None, description="Имя использованного OCR-шаблона")
-    zone_texts: List[str] = Field(default_factory=list, description="Список распознанных текстов из зон")
+    used_template: str | None = Field(default=None, description="Имя использованного OCR-шаблона")
+    zone_texts: list[str] = Field(default_factory=list, description="Список распознанных текстов из зон")
 
 class StructureInfo(BaseModel):
     structured: bool = Field(default=False, description="Был ли файл структурирован")
-    used_structure: Optional[str] = Field(default=None, description="Использованная структура для именования")
-    moved_to: Optional[str] = Field(default=None, description="Относительный путь, куда был перемещён файл")
+    used_structure: str | None = Field(default=None, description="Использованная структура для именования")
+    moved_to: str | None = Field(default=None, description="Относительный путь, куда был перемещён файл")
 
 # запись об одном файле
 class FileRecord(BaseModel):
     filename: str = Field(..., description="Имя файла")
     original_path: str = Field(..., description="Полный путь к исходному файлу")
     size: int = Field(..., gt=0, escription="Размер файла в байтах")
-    hash: Optional[str] = Field(default=None, description="Хеш-сумма файла SHA-256")
+    hash: str | None = Field(default=None, description="Хеш-сумма файла SHA-256")
 
 
     deduplication: DeduplicationInfo = Field(default_factory=DeduplicationInfo)
@@ -59,8 +61,8 @@ class Manifest(BaseModel):
     output: OutputConfig = Field(..., description="Конфигурация вывода")
     stats: Statistics = Field(default_factory=Statistics, description="Статистика обработки")
 
-    records: Dict[str, FileRecord] = Field(default_factory=dict, description="Словарь записей о файлах (ключ — ID файла)")
-    errors: List[Dict[str, Any]] = Field(default_factory=list, description="Список ошибок, возникших при обработке")
+    records: dict[str, FileRecord] = Field(default_factory=dict, description="Словарь записей о файлах (ключ — ID файла)")
+    errors: list[dict[str, Any]] = Field(default_factory=list, description="Список ошибок, возникших при обработке")
 
     # валидаторы
     @field_validator("updated_at")

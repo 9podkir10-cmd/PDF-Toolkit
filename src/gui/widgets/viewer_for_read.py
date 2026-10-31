@@ -1,4 +1,5 @@
-from .pdf_viewer import BasePDFViewer, BasePDFGraphicsView
+from .pdf_viewer import BasePDFGraphicsView, BasePDFViewer
+
 
 class ReadGraphicsView(BasePDFGraphicsView):
     pass

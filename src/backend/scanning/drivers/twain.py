@@ -1,9 +1,11 @@
+from collections.abc import Iterator
 from io import BytesIO
-from typing import Iterator, Optional, List
+
 from PIL import Image
-from .base import BaseScanner
-from ..models import ScannerInfo, ScannedPage, ScanRequest
+
 from ..exceptions import ScannerNotFoundError, ScannerNotOpenError
+from ..models import ScannedPage, ScannerInfo, ScanRequest
+from .base import BaseScanner
 
 try:
     import twain
@@ -19,10 +21,10 @@ class TwainScanner(BaseScanner):
             raise ScannerNotFoundError("Библиотека pytwain не установлена.")
         self._source_manager = None
         self._source = None
-        self._device_name: Optional[str] = None
+        self._device_name: str | None = None
 
-    def list_devices(self) -> List[ScannerInfo]:
-        devices: List[ScannerInfo] = []
+    def list_devices(self) -> list[ScannerInfo]:
+        devices: list[ScannerInfo] = []
         sm = twain.SourceManager()
         try:
             for name in sm.source_list:
@@ -31,7 +33,7 @@ class TwainScanner(BaseScanner):
             sm.close()
         return devices
 
-    def open(self, device_name: Optional[str] = None) -> None:
+    def open(self, device_name: str | None = None) -> None:
         self._source_manager = twain.SourceManager()
         if device_name:
             self._source = self._source_manager.open_source(device_name)
@@ -93,7 +95,7 @@ class TwainScanner(BaseScanner):
             if size is not None:
                 _set(twain_const.ICAP_SUPPORTEDSIZES, twain_const.TWTY_UINT16, size)
 
-    def acquire(self, show_ui: bool = True, request: Optional[ScanRequest] = None) -> Iterator[ScannedPage]:
+    def acquire(self, show_ui: bool = True, request: ScanRequest | None = None) -> Iterator[ScannedPage]:
         if not self._source:
             raise ScannerNotOpenError("Сканер не открыт.")
 

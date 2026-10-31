@@ -1,11 +1,21 @@
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget, QLabel, QPushButton, QLineEdit, QVBoxLayout,
-    QHBoxLayout, QFormLayout, QMessageBox, QFileDialog,
-    QPlainTextEdit
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
-from pathlib import Path
-from backend.structure import structure_pdfs, preview_structure
+
+from backend.structure import preview_structure, structure_pdfs
+
 
 class StructurePage(QWidget):
     def __init__(self):
@@ -90,7 +100,7 @@ class StructurePage(QWidget):
             tree_str = preview_structure(base_dir)
             self.log_text.appendPlainText(tree_str)
         except Exception as e:
-            self.log_text.appendPlainText(f"Ошибка: {str(e)}")
+            self.log_text.appendPlainText(f"Ошибка: {e!s}")
 
     def _run(self):
         folder = self.folder_edit.text().strip()
@@ -137,7 +147,7 @@ class StructurePage(QWidget):
                 )
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", str(e))
-            self.log_text.appendPlainText(f"Исключение: {str(e)}")
+            self.log_text.appendPlainText(f"Исключение: {e!s}")
         finally:
             self.run_button.setEnabled(True)
             self.preview_button.setEnabled(True)

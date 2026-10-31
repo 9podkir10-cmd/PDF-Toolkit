@@ -1,8 +1,10 @@
 import os
-from PySide6.QtCore import Qt, QRectF, QRect, QSize, Signal
-from PySide6.QtGui import QColor, QPen, QAction, QKeySequence, QIcon
-from PySide6.QtWidgets import QGraphicsRectItem, QRubberBand, QPushButton
-from backend.services.box_to_img import Region
+
+from PySide6.QtCore import QRect, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QPen
+from PySide6.QtWidgets import QGraphicsRectItem, QPushButton, QRubberBand
+
+from backend.indexing.models import Region
 from gui.widgets.pdf_viewer import BasePDFGraphicsView, BasePDFViewer
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))

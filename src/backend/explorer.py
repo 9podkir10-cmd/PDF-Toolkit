@@ -1,6 +1,15 @@
 import os
+
 from PySide6.QtCore import QDir, Qt, Signal
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTreeView, QFileSystemModel, QLabel, QStackedWidget)
+from PySide6.QtWidgets import (
+    QFileSystemModel,
+    QHBoxLayout,
+    QLabel,
+    QStackedWidget,
+    QTreeView,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class ExplorerWidget(QWidget):

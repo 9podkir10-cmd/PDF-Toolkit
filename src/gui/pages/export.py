@@ -1,11 +1,22 @@
 from pathlib import Path
-from backend.collect_data import scan_and_export
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget, QLabel, QMenu, QPushButton, QLineEdit, QVBoxLayout,
-    QMessageBox, QHBoxLayout, QFormLayout, QFileDialog, QComboBox,
-    QListWidget, QListWidgetItem, QSizePolicy
+    QComboBox,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
+
+from backend.collect_data import scan_and_export
 
 
 class ExportPage(QWidget):

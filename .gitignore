@@ -6,7 +6,6 @@ __pycache__/
 *.pyd
 .pytest_cache/
 .mypy_cache/
-.vscode/
 .idea/
 *.iml
 .DS_Store
@@ -15,7 +14,6 @@ dist/
 build/
 *.egg-info/
 *.egg
-output/
 *.log
 Tesseract-OCR/
 temp/

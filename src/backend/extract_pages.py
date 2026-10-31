@@ -1,5 +1,7 @@
-import pymupdf
 from pathlib import Path
+
+import pymupdf
+
 
 def extract_pages(pdf_path, output_dir=None, mode='first', value=None, start=None, end=None, log_callback=None):
     def log(message):

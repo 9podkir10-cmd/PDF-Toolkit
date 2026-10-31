@@ -1,6 +1,16 @@
 import os
+
 from PySide6.QtCore import QDir, Qt, Signal
-from PySide6.QtWidgets import (QStackedWidget, QWidget, QVBoxLayout, QTreeView, QFileSystemModel, QLabel, QHBoxLayout)
+from PySide6.QtWidgets import (
+    QFileSystemModel,
+    QHBoxLayout,
+    QLabel,
+    QStackedWidget,
+    QTreeView,
+    QVBoxLayout,
+    QWidget,
+)
+
 from backend.explorer import ExplorerWidget
 
 
@@ -77,6 +87,7 @@ class SecondarySidebar(QStackedWidget):
         super().__init__(parent)
         self.setObjectName("secondarySidebar")
         self.preferred_width = 250 
+        self.setMaximumWidth(400)
         self.explorers = [] 
         self._build_pages()
 

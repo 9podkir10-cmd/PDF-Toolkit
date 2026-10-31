@@ -1,8 +1,11 @@
 import json
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
 from filelock import FileLock
+
 from .models import Manifest
+
 
 class ManifestRepository:
     def __init__(self, path: Path):

@@ -1,11 +1,13 @@
-from typing import List, Optional
+
 from pydantic import BaseModel, Field, field_validator
+
 from backend.constants import SCAN_DPI
+
 
 class Template(BaseModel):
     name: str = Field(..., description="Название шаблона (отображается в интерфейсе)")
     pattern: str = Field(..., description="Шаблон переименования файла (используйте {zone0}, {zone1}, ...)")
-    structure: Optional[str] = Field(None, description="Шаблон структуры папок (оставьте пустым, если не требуется)")
+    structure: str | None = Field(None, description="Шаблон структуры папок (оставьте пустым, если не требуется)")
 
 class ScanProfile(BaseModel):
     name: str = Field(..., description="Название профиля: Light / Dark / High Quality")
@@ -21,9 +23,9 @@ class Config(BaseModel):
     ocr_path: str = Field("", description="Путь к исполняемому файлу Tesseract OCR")
     language: str = Field("rus+eng", description="Язык распознавания: rus+eng / rus / eng")
     ocr_storage_enabled: bool = Field(False, description="Сохранять ли результаты OCR в локальное хранилище")
-    templates: List[Template] = Field(default_factory=list, description="Список шаблонов переименования и структуризации")
+    templates: list[Template] = Field(default_factory=list, description="Список шаблонов переименования и структуризации")
     selected_template_index: int = Field(-1, ge=-1, description="Индекс выбранного шаблона (-1 — не выбран)")
-    scan_profiles: List[ScanProfile] = Field(default_factory=list, description="Список профилей сканирования")
+    scan_profiles: list[ScanProfile] = Field(default_factory=list, description="Список профилей сканирования")
 
     # валидаторы
     @field_validator("language")

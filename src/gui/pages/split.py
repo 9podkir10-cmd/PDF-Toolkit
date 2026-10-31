@@ -1,28 +1,28 @@
 import os
+
+from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
+
+from backend.barcodes import (
+    find_pdf_files,
+    process_single_pdf_file,
+)
 from backend.extract_pages import (
     extract_pages,
-    process_all_pdfs,
-)
-from backend.barcodes import (
-    process_single_pdf_file,
-    process_directory,
-    find_pdf_files,
-)
-from PySide6.QtCore import Qt, Signal, QObject, QThread
-from PySide6.QtWidgets import (
-    QWidget,
-    QLabel,
-    QPushButton,
-    QLineEdit,
-    QPlainTextEdit,
-    QVBoxLayout,
-    QHBoxLayout,
-    QFormLayout,
-    QFileDialog,
-    QComboBox,
-    QSpinBox,
-    QGroupBox,
-    QMessageBox,
 )
 
 

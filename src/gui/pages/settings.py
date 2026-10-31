@@ -1,14 +1,30 @@
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QWidget, QLabel, QPushButton, QLineEdit, QSpinBox,
-    QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox, QFileDialog, QComboBox,
-    QButtonGroup, QSizePolicy, QCheckBox, QListWidget, QDialog, QDialogButtonBox)
-from typing import Optional
-from gui.signals import app_signals
-from backend.config import get_config_service
-from backend.config.models import Template, ScanProfile
-from backend.config.utils import lang_to_id, id_to_lang_string
-from backend.constants import SCAN_DPI
 
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
+
+from backend.config import get_config_service
+from backend.config.models import ScanProfile, Template
+from backend.config.utils import id_to_lang_string, lang_to_id
+from backend.constants import SCAN_DPI
+from gui.signals import app_signals
 
 
 class SettingsPage(QWidget):
@@ -220,7 +236,13 @@ class SettingsPage(QWidget):
     def _show_template_dialog(self, title: str, initial_name: str = "",
                             initial_pattern: str = "",
                             initial_structure: str = "") -> dict | None:
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QDialogButtonBox, QLabel
+        from PySide6.QtWidgets import (
+            QDialog,
+            QDialogButtonBox,
+            QLabel,
+            QLineEdit,
+            QVBoxLayout,
+        )
 
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
@@ -319,7 +341,7 @@ class SettingsPage(QWidget):
             else:
                 QMessageBox.critical(self, "Ошибка", "Не удалось удалить профиль.")
 
-    def _show_profile_dialog(self, title: str, initial_profile: Optional[dict]) -> Optional[dict]:
+    def _show_profile_dialog(self, title: str, initial_profile: dict | None) -> dict | None:
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
         layout = QVBoxLayout(dialog)

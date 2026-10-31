@@ -1,11 +1,12 @@
 import argparse
 import os
-import json
 from pathlib import Path
-from backend.extract_pages import extract_pages, process_all_pdfs
-from backend.collect_data import scan_and_export
+
+from backend.barcodes import process_directory, process_single_pdf_file
 from backend.clear_path import DirectoryNormalizer
-from backend.barcodes import process_single_pdf_file, process_directory
+from backend.collect_data import scan_and_export
+from backend.extract_pages import extract_pages, process_all_pdfs
+
 
 def main():
     parser = argparse.ArgumentParser(description="PDF-Toolkit: Универсальная утилита для работы с PDF.")

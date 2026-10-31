@@ -1,12 +1,19 @@
-from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QPixmap, QImage, QAction
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QGroupBox, QGridLayout,
-    QScrollArea, QMenu, QInputDialog, QMessageBox
-)
 from PIL import Image
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction, QImage, QPixmap
+from PySide6.QtWidgets import (
+    QGridLayout,
+    QGroupBox,
+    QInputDialog,
+    QLabel,
+    QMenu,
+    QMessageBox,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
 
-from backend.scanning.models import Batch, Document, Page
+from backend.scanning.models import Batch, Page
 
 
 def pil_to_pixmap(pil_image: Image.Image, max_size: int = 120) -> QPixmap:

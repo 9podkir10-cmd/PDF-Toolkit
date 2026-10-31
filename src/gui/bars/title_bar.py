@@ -1,7 +1,15 @@
 import os
-from PySide6.QtCore import Qt, QSize, Signal
-from PySide6.QtGui import QIcon, QAction
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QMenu, QLineEdit
+
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMenu,
+    QPushButton,
+    QWidget,
+)
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 ICON_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "..", "..", "assets", "icons", "title_bar"))

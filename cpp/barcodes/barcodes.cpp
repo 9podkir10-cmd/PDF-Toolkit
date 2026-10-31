@@ -576,7 +576,6 @@ int wmain(int argc, wchar_t* argv[]) {
 
     // Проверяем специальный режим --file
     if (argc >= 3 && wcscmp(argv[1], L"--file") == 0) {
-        // Режим обработки одного файла (для дочернего процесса)
         fs::path pdf_path(argv[2]);
         std::vector<std::string> patterns;
         std::string pattern = (argc >= 4) ? wstring_to_utf8(argv[3]) : "PATCH2";

@@ -1,12 +1,11 @@
-from pathlib import Path
-from typing import List, Dict, Tuple
-import os
 import hashlib
+import multiprocessing
+import os
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import multiprocessing
+from pathlib import Path
+
 from backend.manifest import get_manifest_service
-from backend.manifest.models import Manifest, FileRecord
 
 
 class DirectoryNormalizer:
@@ -73,7 +72,7 @@ class DirectoryNormalizer:
                     / f"{target_path.stem}_{counter}{target_path.suffix}"
                 )
 
-    def _discover_all_pdfs(self) -> List[Dict]:
+    def _discover_all_pdfs(self) -> list[dict]:
         pdf_files = []
         for pdf_path in self.source_dir.rglob("*.pdf", case_sensitive=False):
             if pdf_path.is_file():
@@ -92,7 +91,7 @@ class DirectoryNormalizer:
         pdf_files.sort(key=lambda x: x["path"].as_posix().casefold())
         return pdf_files
 
-    def _generate_filename(self, file_info: dict, stage: int, hash_value: str = None) -> str:
+    def _generate_filename(self, file_info: dict, stage: int, hash_value: str | None = None) -> str:
         stem = file_info['path'].stem
         size = file_info['size']
         if stage == 1:
@@ -117,13 +116,13 @@ class DirectoryNormalizer:
             links_to=links_to,
         )
 
-    def _stage1_group_by_size(self) -> Dict:
+    def _stage1_group_by_size(self) -> dict:
         size_groups = defaultdict(list)
         for file_info in self.pdf_files:
             size_groups[str(file_info['size'])].append(file_info)
         return size_groups
 
-    def _stage2_partial_hash(self, size_groups: Dict) -> Dict:
+    def _stage2_partial_hash(self, size_groups: dict) -> dict:
         partial_hash_groups = defaultdict(list)
         files_to_hash = []  # список (size_key, file_info) для параллельной обработки
         
@@ -160,7 +159,7 @@ class DirectoryNormalizer:
             group.sort(key=lambda info: info["path"].as_posix().casefold())
         return partial_hash_groups
 
-    def _stage3_full_hash(self, partial_hash_groups: Dict) -> Dict:
+    def _stage3_full_hash(self, partial_hash_groups: dict) -> dict:
         full_hash_groups = defaultdict(list)
         files_to_hash = []
 
@@ -197,7 +196,7 @@ class DirectoryNormalizer:
             group.sort(key=lambda info: info["path"].as_posix().casefold())
         return full_hash_groups
 
-    def _stage4_byte_by_byte(self, full_hash_groups: Dict) -> None:
+    def _stage4_byte_by_byte(self, full_hash_groups: dict) -> None:
         for full_hash, files in full_hash_groups.items():
             if len(files) == 1:
                 file_info = files[0]
@@ -210,7 +209,7 @@ class DirectoryNormalizer:
                 self._process_unique_files(unique_files, full_hash)
                 self._process_duplicates(duplicate_pairs, full_hash)
 
-    def _separate_unique_and_duplicates(self, files: List[Dict]) -> Tuple[List[Dict], List[Tuple]]:
+    def _separate_unique_and_duplicates(self, files: list[dict]) -> tuple[list[dict], list[tuple]]:
         unique_files = []
         duplicate_pairs = []
         for file_info in files:
@@ -224,7 +223,7 @@ class DirectoryNormalizer:
                 unique_files.append(file_info)
         return unique_files, duplicate_pairs
 
-    def _process_unique_files(self, unique_files: List[Dict], full_hash: str) -> None:
+    def _process_unique_files(self, unique_files: list[dict], full_hash: str) -> None:
         for file_info in unique_files:
             new_name = self._generate_filename(file_info, stage=4, hash_value=full_hash)
             target_path = self.output_dir / new_name
@@ -238,7 +237,7 @@ class DirectoryNormalizer:
             record_id = self._add_to_manifest(file_info, new_name, stage=4, hash_value=full_hash)
             file_info["record_id"] = record_id
 
-    def _process_duplicates(self, duplicate_pairs: List[Tuple[Dict, Dict]], full_hash: str) -> None:
+    def _process_duplicates(self, duplicate_pairs: list[tuple[dict, dict]], full_hash: str) -> None:
         for file_info, original_file in duplicate_pairs:
             original_record_id = original_file.get("record_id")
             if original_record_id is None:
@@ -265,7 +264,7 @@ class DirectoryNormalizer:
                 original_id=original_record_id
             )
 
-    def _build_result(self) -> Dict:
+    def _build_result(self) -> dict:
         manifest = self.manifest_service.get_manifest()
         if manifest is None:
             return {}
@@ -293,7 +292,7 @@ class DirectoryNormalizer:
             },
         }
 
-    def normalize_structure(self) -> Dict:
+    def normalize_structure(self) -> dict:
         if self.output_dir.exists() and self.manifest_path.exists():
             self.manifest_service.load_or_create(
                 source_dir=self.source_dir.as_posix(),

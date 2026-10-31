@@ -1,22 +1,22 @@
-from .service import ScanService
-from .models import ScanRequest, ScanResult, ScannedPage, ScannerInfo
 from .exceptions import (
+    ScanCancelledError,
     ScannerError,
     ScannerNotFoundError,
     ScannerNotOpenError,
-    ScanCancelledError,
 )
+from .models import ScannedPage, ScannerInfo, ScanRequest, ScanResult
+from .service import ScanService
 
 __all__ = [
-    "ScanService",
+    "ScanCancelledError",
     "ScanRequest",
     "ScanResult",
+    "ScanService",
     "ScannedPage",
-    "ScannerInfo",
     "ScannerError",
+    "ScannerInfo",
     "ScannerNotFoundError",
     "ScannerNotOpenError",
-    "ScanCancelledError",
 ]
 
 

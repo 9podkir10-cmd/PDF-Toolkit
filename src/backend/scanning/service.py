@@ -1,31 +1,32 @@
 import shutil
 from pathlib import Path
-from typing import List, Optional
+
 from PIL import Image
+
 from .drivers.base import BaseScanner
-from .drivers.twain import TwainScanner
 from .drivers.folder import FolderScanner
-from .models import ScanRequest, ScanResult, ScannedPage, ScannerInfo
+from .drivers.twain import TwainScanner
 from .exceptions import ScannerNotFoundError
+from .models import ScannerInfo, ScanRequest
 
 
 class ScanService:
-    def __init__(self, scanner: Optional[BaseScanner] = None):
+    def __init__(self, scanner: BaseScanner | None = None):
         self._scanner = scanner
-        self._temp_dirs: List[Path] = []
+        self._temp_dirs: list[Path] = []
 
     @staticmethod
-    def list_available_devices() -> List[ScannerInfo]:
+    def list_available_devices() -> list[ScannerInfo]:
         try:
             return TwainScanner().list_devices()
         except ScannerNotFoundError:
             return []
 
     @staticmethod
-    def list_folder_devices() -> List[ScannerInfo]:
+    def list_folder_devices() -> list[ScannerInfo]:
         return []
 
-    def open_twain(self, device_name: Optional[str] = None) -> None:
+    def open_twain(self, device_name: str | None = None) -> None:
         self._scanner = TwainScanner()
         self._scanner.open(device_name)
 
@@ -45,10 +46,10 @@ class ScanService:
         return self._scanner is not None and self._scanner.is_open
 
     @property
-    def device_name(self) -> Optional[str]:
+    def device_name(self) -> str | None:
         return getattr(self._scanner, "_device_name", None)
 
-    def scan(self, request: ScanRequest) -> List[Path]:
+    def scan(self, request: ScanRequest) -> list[Path]:
         if not self._scanner or not self._scanner.is_open:
             raise RuntimeError("Сканер не открыт.")
 
@@ -74,21 +75,21 @@ class ScanService:
 
         return self._save_single(images, scan_dir, request)
 
-    def _save_single(self, images: List[Image.Image], output_dir: Path, request: ScanRequest) -> List[Path]:
-        result: List[Path] = []
+    def _save_single(self, images: list[Image.Image], output_dir: Path, request: ScanRequest) -> list[Path]:
+        result: list[Path] = []
         for idx, img in enumerate(images, start=1):
             target = output_dir / f"{idx:04d}.bmp"
             img.save(target, format="BMP")
             result.append(target)
         return result
 
-    def _save_chunks(self, images: List[Image.Image], output_dir: Path, request: ScanRequest) -> List[Path]:
+    def _save_chunks(self, images: list[Image.Image], output_dir: Path, request: ScanRequest) -> list[Path]:
         chunk_size = request.split_by_count
         chunks = [
             images[i:i + chunk_size]
             for i in range(0, len(images), chunk_size)
         ]
-        result: List[Path] = []
+        result: list[Path] = []
         for idx, chunk in enumerate(chunks, start=1):
             part_dir = output_dir / f"part{idx:02d}"
             part_dir.mkdir(parents=True, exist_ok=True)

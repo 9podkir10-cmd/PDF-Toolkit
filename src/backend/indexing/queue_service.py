@@ -1,10 +1,11 @@
 from pathlib import Path
-from typing import List
+
 from backend.manifest import get_manifest_service
+
 
 class PDFQueueService:
     @staticmethod
-    def get_pending(folder: Path) -> List[str]:
+    def get_pending(folder: Path) -> list[str]:
         """
         Возвращает список record_id файлов, которые ещё не распознаны.
         Учитывает:

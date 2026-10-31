@@ -1,22 +1,23 @@
 import re
 import shutil
 from pathlib import Path
-from typing import Dict, List
+
 from backend.manifest import get_manifest_service
+
 
 def sanitize_segment(segment: str) -> str:
     cleaned = re.sub(r'[^a-zA-Zа-яА-ЯёЁ0-9\s\-]', '', segment)
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     return cleaned
 
-def build_path_from_structure(structure_template: str, zone_texts: List[str]) -> Path:
+def build_path_from_structure(structure_template: str, zone_texts: list[str]) -> Path:
     path_str = structure_template
     for i, text in enumerate(zone_texts):
         path_str = path_str.replace(f"{{zone{i}}}", text)
     segments = [sanitize_segment(s) for s in path_str.split('/') if s.strip()]
     return Path(*segments)
 
-def structure_pdfs(base_dir: Path, pending_ids: List[str]) -> Dict:
+def structure_pdfs(base_dir: Path, pending_ids: list[str]) -> dict:
     manifest_path = base_dir / "manifest.json"
     if not manifest_path.exists():
         return {"error": "manifest.json не найден в выбранной папке"}
@@ -78,7 +79,7 @@ def structure_pdfs(base_dir: Path, pending_ids: List[str]) -> Dict:
             details.append(f"Перемещён: {source_file.name} → {target_file}")
         except Exception as e:
             errors += 1
-            details.append(f"Ошибка перемещения {source_file.name}: {str(e)}")
+            details.append(f"Ошибка перемещения {source_file.name}: {e!s}")
    
     service.save()
     return {"moved": moved, "errors": errors, "details": details}

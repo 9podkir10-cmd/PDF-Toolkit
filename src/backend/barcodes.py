@@ -1,14 +1,13 @@
-import os
-import sys
-from pathlib import Path
+import math
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import cpu_count
-import math
-import pymupdf
+from pathlib import Path
+
 import cv2
 import numpy as np
+import pymupdf
 from PIL import Image
-from pyzbar.pyzbar import decode, ZBarSymbol
+from pyzbar.pyzbar import ZBarSymbol, decode
 
 NUM_WORKERS = max(1, cpu_count() - 1)
 ZOOM_LEVEL = 1.5
@@ -63,12 +62,8 @@ def process_page_batch(pdf_path, page_numbers, target_codes):
 
 
 def find_code39_pages_parallel(pdf_path, target_codes, max_workers=None):
-    try:
-        doc = pymupdf.open(pdf_path)
+    with pymupdf.open(pdf_path) as doc:
         total_pages = len(doc)
-        doc.close()
-    except Exception:
-        return pdf_path, []
 
     if total_pages == 0:
         return pdf_path, []
@@ -110,37 +105,32 @@ def split_pdf_by_code39(pdf_path, barcode_pages, output_dir=None):
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    doc = pymupdf.open(pdf_path)
-    total_pages = len(doc)
-
-    barcode_pages.sort()
-
     created_files = []
     part_number = 1
     start_page = 0
 
-    all_separators = barcode_pages + [total_pages]
+    barcode_pages.sort()
 
-    for separator in all_separators:
-        if separator <= start_page:
-            continue
+    with pymupdf.open(pdf_path) as doc:
+        total_pages = len(doc)
+        all_separators = barcode_pages + [total_pages]
 
-        new_doc = pymupdf.open()
-        for page_num in range(start_page, separator):
-            new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+        for separator in all_separators:
+            if separator <= start_page:
+                continue
 
-        output_filename = output_dir / f"{pdf_file.stem}_part{part_number}.pdf"
-        new_doc.save(str(output_filename))
-        new_doc.close()
+            with pymupdf.open() as new_doc:
+                for page_num in range(start_page, separator):
+                    new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+                
+                output_filename = output_dir / f"{pdf_file.stem}_part{part_number}.pdf"                      
+                new_doc.save(str(output_filename))
 
-        created_files.append(str(output_filename))
+            created_files.append(str(output_filename))
+            part_number += 1
+            start_page = separator + 1
 
-        part_number += 1
-        start_page = separator + 1
-
-    doc.close()
     return created_files
-
 
 def process_single_pdf_file(pdf_path, target_codes, output_dir=None):
     pdf_file = Path(pdf_path)

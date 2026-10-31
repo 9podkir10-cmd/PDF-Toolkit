@@ -1,19 +1,20 @@
 # src/backend/scanning/drivers/base.py
 from abc import ABC, abstractmethod
-from typing import Iterator, Optional, List
-from ..models import ScannerInfo, ScannedPage
+from collections.abc import Iterator
+
+from ..models import ScannedPage, ScannerInfo
 
 
 class BaseScanner(ABC):
     """Абстрактный интерфейс сканера."""
 
     @abstractmethod
-    def list_devices(self) -> List[ScannerInfo]:
+    def list_devices(self) -> list[ScannerInfo]:
         """Возвращает список доступных устройств."""
         ...
 
     @abstractmethod
-    def open(self, device_name: Optional[str] = None) -> None:
+    def open(self, device_name: str | None = None) -> None:
         """Открывает устройство."""
         ...
 

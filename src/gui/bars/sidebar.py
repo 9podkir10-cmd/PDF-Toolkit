@@ -1,13 +1,13 @@
 import os
-from PySide6.QtCore import Signal, QSize
+
+from PySide6.QtCore import QSize, Signal
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import (QPushButton, QVBoxLayout, QWidget, QLabel, QSizePolicy)
+from PySide6.QtWidgets import QPushButton, QVBoxLayout, QWidget
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 ICON_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "..", "..", "assets", "icons", "sidebar"))
 ICON_DASHBOARD = os.path.join(ICON_DIR, "dashboard.svg")
 ICON_EXPORT    = os.path.join(ICON_DIR, "export.svg")
-ICON_INDEX     = os.path.join(ICON_DIR, "index.svg")
 ICON_SPLIT     = os.path.join(ICON_DIR, "split.svg")
 ICON_SCAN      = os.path.join(ICON_DIR, "scan.svg")
 ICON_VIEWER    = os.path.join(ICON_DIR, "viewer.svg")
@@ -17,7 +17,6 @@ ICON_SETTINGS  = os.path.join(ICON_DIR, "settings.svg")
 class Sidebar(QWidget):
     viewer_clicked = Signal()
     export_clicked = Signal()
-    index_clicked = Signal()
     split_clicked = Signal()
     scan_clicked = Signal()
     settings_clicked = Signal()
@@ -37,7 +36,6 @@ class Sidebar(QWidget):
 
         self.viewer_button = QPushButton()
         self.export_button = QPushButton()
-        self.index_button = QPushButton()
         self.split_button = QPushButton()
         self.scan_button = QPushButton()
         self.dashboard_button = QPushButton()
@@ -46,7 +44,6 @@ class Sidebar(QWidget):
         buttons = [
             (self.viewer_button, self.viewer_clicked, ICON_VIEWER, "PDF/TXT Viewer"),            
             (self.export_button, self.export_clicked, ICON_EXPORT, "Export"),
-            (self.index_button, self.index_clicked, ICON_INDEX, "Index"),
             (self.split_button, self.split_clicked, ICON_SPLIT, "Split"),        
             (self.scan_button, self.scan_clicked, ICON_SCAN, "Scan"),
         ]

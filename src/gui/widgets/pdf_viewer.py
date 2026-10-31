@@ -1,9 +1,23 @@
 import os
-from PySide6.QtCore import Qt, QRectF, Signal, QSize
-from PySide6.QtGui import QPixmap, QPainter, QAction, QKeySequence, QIcon
-from PySide6.QtWidgets import (QWidget, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QFrame,
-    QVBoxLayout, QComboBox, QHBoxLayout, QSpinBox, QPushButton, QButtonGroup, QLabel)
+from pathlib import Path
+
 import pymupdf
+from PySide6.QtCore import QRectF, Qt, Signal
+from PySide6.QtGui import QAction, QIcon, QKeySequence, QPainter, QPixmap
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QComboBox,
+    QGraphicsPixmapItem,
+    QGraphicsScene,
+    QGraphicsView,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
+
 from backend.constants import RENDER_DPI
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -39,13 +53,11 @@ class BasePDFGraphicsView(QGraphicsView):
 
     def load_pdf(self, pdf_path: str, page_num: int = 0):
         try:
-            current_transform = self.transform()
-            self.current_pdf_path = pdf_path
-            self.current_page_num = page_num
-            if self.doc:
-                self.doc.close()
-            self.doc = pymupdf.open(pdf_path)
-            page = self.doc[page_num]
+            current_transform = self.transform() 
+            pdf_bytes = Path(pdf_path).read_bytes()
+            self.doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+            
+            page = self.doc[page_num]            
             pix = page.get_pixmap(dpi=self.dpi)
             img_data = pix.tobytes("ppm")
             pixmap = QPixmap()
@@ -53,14 +65,16 @@ class BasePDFGraphicsView(QGraphicsView):
             self.current_pixmap = pixmap
             self.pixmap_item.setPixmap(pixmap)
             self.scene.setSceneRect(QRectF(0, 0, pixmap.width(), pixmap.height()))
+            
             if not current_transform.isIdentity():
                 self.setTransform(current_transform)
             else:
                 self.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
+                
             total = self.doc.page_count if self.doc else 0
             self.page_changed.emit(page_num + 1, total) 
-        except Exception as e:
-            print(f"Error loading PDF: {e}")
+            
+        except Exception:
             self.pixmap_item.setPixmap(QPixmap())
             self.scene.setSceneRect(QRectF(0, 0, 400, 300))
             self.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
@@ -79,7 +93,7 @@ class BasePDFGraphicsView(QGraphicsView):
         if self.doc:
             self.doc.close()
             self.doc = None
-            self.update()
+        self.update()
 
     def wheelEvent(self, event):
         factor = 1.25 if event.angleDelta().y() > 0 else 0.8

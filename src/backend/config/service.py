@@ -1,11 +1,12 @@
-from typing import List, Optional
-from .models import Config, Template, ScanProfile
+
+from .models import Config, ScanProfile, Template
 from .repository import ConfigRepository
+
 
 class ConfigService:
     def __init__(self, repo: ConfigRepository):
         self._repo = repo
-        self._config: Optional[Config] = None
+        self._config: Config | None = None
 
     def _load(self) -> Config:
         if self._config is None:
@@ -33,7 +34,7 @@ class ConfigService:
         config.ocr_storage_enabled = ocr_storage_enabled
         return self._save()
 
-    def get_templates(self) -> List[Template]:
+    def get_templates(self) -> list[Template]:
         return self._load().templates
 
     def get_selected_template_index(self) -> int:
@@ -44,15 +45,15 @@ class ConfigService:
         config.selected_template_index = index
         return self._save()
 
-    def save_templates(self, templates: List[Template]) -> bool:
+    def save_templates(self, templates: list[Template]) -> bool:
         config = self._load()
         config.templates = templates
         return self._save()
 
-    def get_scan_profiles(self) -> List[ScanProfile]:
+    def get_scan_profiles(self) -> list[ScanProfile]:
         return self._load().scan_profiles
 
-    def save_scan_profiles(self, profiles: List[ScanProfile]) -> bool:
+    def save_scan_profiles(self, profiles: list[ScanProfile]) -> bool:
         config = self._load()
         config.scan_profiles = profiles
         return self._save()
